@@ -1,3 +1,16 @@
+New branch f90std
+=================
+This branch f90std aims to replace Fortran legacy definitions with standard (f90 compatible) definitions 
+Author information
+------------------
+
+Xiaorun ZANG (xiaorun.zang@tut.fi)
+Posdoctoral Researcher at Tampere University of Technology (2016-)
+Faculty of Natural Science
+Department of Physics
+Optics Laboratory
+Nonlinear Optics Group
+
 FOR90-MOM2 USER'S GUIDE
 =======================
 

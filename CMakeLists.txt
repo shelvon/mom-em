@@ -27,7 +27,9 @@ endif()
 set(CMAKE_EXE_LINKER_FLAGS "-mkl")
 
 add_executable(mom
-amos.f
+f77toms644/zbsubs.f
+f77toms644/zbesyh.f
+f77toms644/machcon.f
 aux.f90
 constants.f90
 ffields.f90
