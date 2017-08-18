@@ -12,9 +12,9 @@ MODULE greenprd
   TYPE prdcoef
      COMPLEX (KIND=dp), DIMENSION(:,:,:,:), ALLOCATABLE :: samples
      COMPLEX (KIND=dp), DIMENSION(:,:,:,:), ALLOCATABLE :: samplesz
-     REAL (KIND=dp), DIMENSION(:,:,:), ALLOCATABLE :: rho
-     REAL (KIND=dp), DIMENSION(:,:,:), ALLOCATABLE :: kt
-     REAL (KIND=dp) :: E, k0x, k0y, wl, range
+     REAL (KIND=dp), DIMENSION(:,:,:), ALLOCATABLE :: rho ! Jouni's PhD theis, Eq. (3.28)
+     REAL (KIND=dp), DIMENSION(:,:,:), ALLOCATABLE :: kt ! Jouni's PhD theis, Eq. (3.29)
+     REAL (KIND=dp) :: E, k0x, k0y, wl, range ! E, the splitting parameter
      INTEGER :: ic, jc, kc, n, m, np, npz
      COMPLEX (KIND=dp) :: ri, ri0, k
   END TYPE prdcoef

@@ -52,6 +52,9 @@ MODULE source
      ! Excitation source position for, e.g., beams and a dipole.
      REAL (KIND=dp), DIMENSION(3) :: pos
 
+     ! In which plane of the source locate
+     CHARACTER (LEN=256) :: sxyz
+
      ! Dipole moment of a dipole source.
      COMPLEX (KIND=dp), DIMENSION(3) :: dmom
 

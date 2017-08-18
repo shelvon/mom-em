@@ -405,11 +405,17 @@ CONTAINS
     READ(line,*) b%nwl, (b%sols(n)%wl, n=1,b%nwl)
   END SUBROUTINE read_wllist
 
+
+  ! Update this subroutine to support scan over any 3 planes.
+  ! New soubroutine use one more parameter to specify in which plane to scan.
+  ! The new command is "scan [sx/y/z] [sxyz-val] [d] [npt]", and [sx/y/z] can only be character data type of 'sx','sy','sz'
+  ! Scan can only be made for one source, i.e. the first source in ssrc command, refer code below.
   SUBROUTINE read_scan_source(line, b)
     CHARACTER (LEN=*), INTENT(IN) :: line
     TYPE(batch), INTENT(INOUT) :: b
     INTEGER :: npt, n, m, index
-    REAL (KIND=dp) :: sz, d
+    CHARACTER (LEN=256) :: sxyz
+    REAL (KIND=dp) :: sxyz_val, d
     TYPE(srcdata) :: src
 
     IF(ALLOCATED(b%src)==.FALSE.) THEN
@@ -417,9 +423,10 @@ CONTAINS
        STOP
     END IF
 
-    READ(line,*) sz, d, npt
+    READ(line,*) sxyz, sxyz_val, d, npt
 
     src = b%src(1)
+    ! Only the first source is used for scan image
 
     DEALLOCATE(b%src)
 
@@ -427,14 +434,25 @@ CONTAINS
 
     ! Construct sources so that in column major matrix R
     ! of results R(1,1) corresponds to top left position.
+    ! In case of [sx], R goes from (-y,+z) to (+y,-z), with x=sxyz_val;
+    ! In case of [sy], R goes from (-z,+y) to (+z,-y), with y=sxyz_val;
+    ! In case of [sz], R goes from (-x,+y) to (+x,-y), with z=sxyz_val.
     DO n=1,npt
        DO m=1,npt
           index = (n-1)*npt + m
-          b%src(index) = src
-          b%src(index)%pos = (/-d/2+d*REAL(n-1,KIND=dp)/(npt-1), d/2-d*REAL(m-1,KIND=dp)/(npt-1), sz/)
+          b%src(index) = src ! get parameters of the first light source
+          b%src(index)%sxyz = TRIM(sxyz)
+          IF(b%src(index)%sxyz == 'sx') THEN
+             b%src(index)%pos = (/sxyz_val, -d/2+d*REAL(n-1,KIND=dp)/(npt-1), d/2-d*REAL(m-1,KIND=dp)/(npt-1)/)
+          ELSE IF(b%src(index)%sxyz == 'sy') THEN
+             b%src(index)%pos = (/d/2-d*REAL(n-1,KIND=dp)/(npt-1), sxyz_val, -d/2+d*REAL(m-1,KIND=dp)/(npt-1)/)
+          ELSE IF(b%src(index)%sxyz == 'sz') THEN
+             b%src(index)%pos = (/-d/2+d*REAL(n-1,KIND=dp)/(npt-1), d/2-d*REAL(m-1,KIND=dp)/(npt-1), sxyz_val/)
+          END IF
        END DO
     END DO
 
+    WRITE(*,*) 'Source location ', TRIM(sxyz), ' = ', sxyz_val
     WRITE(*,*) 'Source scanning was setup'
 
   END SUBROUTINE read_scan_source
@@ -451,9 +469,10 @@ CONTAINS
        STOP
     END IF
 
-    READ(line,*) index, pos(1:3)
+    READ(line,*) index, pos(1), pos(2), pos(3)
+    WRITE(*,*) "sindex:", index, " is moved to pos: ", pos
 
-    b%src(index)%pos = pos
+    b%src(index)%pos = (/pos(1), pos(2), pos(3)/)
   END SUBROUTINE read_move_source
 
   ! Allocate source definitions.
@@ -710,6 +729,7 @@ CONTAINS
        Tpower(n,:) = transmittance(b%domains(dindexT)%mesh, b%ga, addsrc, b%src,&
             b%sols(n)%x, b%mesh%nedges, omega, ri, ri_inc, prd, z0T, -1.0_dp, b%qd_tri)
 
+
        ri = b%media(b%domains(dindexR)%medium_index)%prop(n)%ri
        prd => b%prd(b%domains(dindexR)%gf_index)
        prd%cwl = find_closest(wl, prd%coef(:)%wl)
@@ -779,6 +799,9 @@ CONTAINS
 
     READ(line,*) wlindex, srcindex, dindex
 
+    WRITE(*,*) 'command nfms'
+    WRITE(*,*) 'srcindex=',srcindex,'; pos:',b%src(srcindex)%pos
+
     WRITE(numstr, '(A,I0,A,I0,A,I0)') '-wl', wlindex, '-s', srcindex, '-d', dindex
     oname = TRIM(b%name) // TRIM(ADJUSTL(numstr)) // '.msh'
 
@@ -814,7 +837,8 @@ CONTAINS
     COMPLEX (KIND=dp), DIMENSION(:,:,:,:), ALLOCATABLE :: ef, hf
     TYPE(prdnfo), POINTER :: prd
 
-    READ(line,*) wlindex, dindex, origin, v1, v2, n1, n2, tag
+    ! READ(line,*) wlindex, dindex, origin, v1, v2, n1, n2, tag
+    READ(line,*) wlindex, dindex, origin(1), origin(2), origin(3), v1(1), v1(2), v1(3), v2(1), v2(2), v2(3), n1, n2, tag
 
     ALLOCATE(ef(3,SIZE(b%src),n2,n1), hf(3,SIZE(b%src),n2,n1))
 
@@ -830,7 +854,7 @@ CONTAINS
     END IF
 
     CALL field_plane(b%domains(dindex)%mesh, b%mesh%nedges, b%sols(wlindex)%x, b%ga,&
-         omega, ri, prd, dindex==1, b%src, b%qd_tri, origin, v1, v2, n1, n2, ef, hf)
+         omega, ri, prd, .FALSE., b%src, b%qd_tri, origin, v1, v2, n1, n2, ef, hf)
 
     DO ns=1,SIZE(b%src)
        WRITE(numstr, '(A,I0,A,I0,A,I0,A,A)') '-wl', wlindex, '-s', ns, '-d', dindex, '-', TRIM(ADJUSTL(tag))
@@ -1177,7 +1201,13 @@ CONTAINS
   ! Computes a 2D image, where pixels correspond to source positions.
   ! Data may be plotted direcly with MATLAB's scimage, whence x-axis
   ! points right and y-axis points up.
-  SUBROUTINE read_rcs2(line, b)
+
+  ! For new command "scan [sx/y/z] [sxyz_val] [d] [npt]", when
+  ! [sx] is used, x-axis points right (-y -> +y), y-axis points up (-z -> +z);
+  ! [sy] is used, x-axis points right (-z -> +z), y-axis points up (-x -> +x);
+  ! [sz] is used, x-axis points right (-x -> +x), y-axis points up (-y -> +y).
+  ! In any case, the angle theta is measured with respect to +z-axis, phi to +x-axis
+ SUBROUTINE read_rcs2(line, b)
     CHARACTER (LEN=*), INTENT(IN) :: line
     TYPE(batch), INTENT(INOUT) :: b
     INTEGER :: iovar, npt, wlindex, n
@@ -1300,6 +1330,8 @@ CONTAINS
     READ(line,*) wlindex, srcindex, ntheta_rcs, nphi_rcs
 
     WRITE(*,*) 'Computing radar cross-sections'
+    WRITE(*,*) 'command rcst'
+    WRITE(*,*) 'srcindex=',srcindex,'; pos:',b%src(srcindex)%pos
     CALL timer_start()
 
     ALLOCATE(rcsdata(1:ntheta_rcs,1:nphi_rcs))
@@ -1483,6 +1515,7 @@ CONTAINS
     REAL (KIND=dp) :: omega
     COMPLEX (KIND=dp) :: ri
     TYPE(srcdata) :: nlsrc
+    CHARACTER (LEN=256) :: oname, numstr
 
     WRITE(*,*) 'Computing scattering cross-section'
 
@@ -1507,7 +1540,10 @@ CONTAINS
     !$OMP END DO
     !$OMP END PARALLEL
 
-    CALL write_data(TRIM(b%name) // '.crs', data)
+    WRITE(numstr, '(A,I0)') '-s1'
+    oname = TRIM(b%name) // TRIM(ADJUSTL(numstr)) // '.crs'
+
+    CALL write_data(oname, data)
 
     ! Second-harmonic.
     IF(ALLOCATED(b%sols(1)%nlx)) THEN
@@ -1533,8 +1569,11 @@ CONTAINS
        END DO
        !$OMP END DO
        !$OMP END PARALLEL
-       
-       CALL write_data(TRIM(b%name) // '-sh.crs', data)
+
+       WRITE(numstr, '(A,I0)') '-s1'
+       oname = TRIM(b%name) // TRIM(ADJUSTL(numstr)) // '-sh.crs'
+   
+       CALL write_data(oname, data)
     END IF
   END SUBROUTINE read_csca
 
@@ -1650,6 +1689,9 @@ CONTAINS
 
        IF(stat<0 .OR. scmd=='exit') THEN
           EXIT
+       ELSE IF(scmd=='#') THEN
+          WRITE(*,*) '# ',line(1+1:LEN_TRIM(line))
+          CYCLE
        ELSE IF(scmd=='name') THEN
           READ(line,*) b%name
        ELSE IF(scmd=='mesh') THEN

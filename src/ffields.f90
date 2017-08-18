@@ -163,8 +163,7 @@ CONTAINS
 
   END SUBROUTINE rcs_solangle_old
 
-  ! Radar cross-section integrated over solid angle range [theta1,theta2].
-  ! around the z-axis in +z-direction.
+  ! Radar cross-section angle range [theta1,theta2] around the z-axis in +z-direction for any "scan [sx/y/z]".
   SUBROUTINE rcs_solangle(mesh, nedgestot, omega, ri, ga, x, theta1, theta2, qd, scatp)
     TYPE(mesh_container), INTENT(IN) :: mesh
     INTEGER, INTENT(IN) :: nedgestot
@@ -186,13 +185,13 @@ CONTAINS
 
   CONTAINS
     FUNCTION integ(theta, phi) RESULT(res)
-      REAL (KIND=dp), INTENT(IN) :: theta, phi
+      REAL (KIND=dp) :: theta, phi
       COMPLEX (KIND=dp) :: res
       COMPLEX (KIND=dp) :: et, ep, ht, hp
       
       CALL far_fields(mesh, nedgestot, omega, ri, ga, x, 1.0_dp,&
            theta, phi, qd, et, ep, ht, hp)
-      
+
       res = SIN(theta)*(ABS(et)**2 + ABS(ep)**2)
     END FUNCTION integ
 

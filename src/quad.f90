@@ -478,8 +478,8 @@ CONTAINS
   END FUNCTION asqz
 
   ! Integrates f(x,y) over [x1,x2]x[y1,y2].
-  SUBROUTINE asqz2(f, x1, x2, y1, y2, eps, maxDepth, res)
-    COMPLEX (KIND=dp), EXTERNAL :: f
+  SUBROUTINE asqz2(fInteg, x1, x2, y1, y2, eps, maxDepth, res)
+    COMPLEX (KIND=dp), EXTERNAL :: fInteg
     REAL (KIND=dp), INTENT(IN) :: x1, x2, y1, y2, eps
     INTEGER, INTENT(IN) :: maxDepth
     COMPLEX (KIND=dp), INTENT(INOUT) :: res
@@ -497,13 +497,14 @@ CONTAINS
       REAL (KIND=dp), INTENT(IN) :: x
       COMPLEX (KIND=dp) :: z
 
-      z = f(x,gy)
+      z = fInteg(x,gy)
+      ! Here, 'f(x,gy)' is referring to 'integ(theta, phi)'
     END FUNCTION fproxy
 
     FUNCTION fnested(y) RESULT(z)
       REAL (KIND=dp), INTENT(IN) :: y
       COMPLEX (KIND=dp) :: z
-      
+
       gy = y
 
       z = asqz(fproxy, x1, x2, eps, maxDepth)
