@@ -15,6 +15,7 @@ MODULE common
   TYPE medium_prop
      COMPLEX (KIND=dp) :: ri
      COMPLEX (KIND=dp) :: shri
+     COMPLEX (KIND=dp) :: thri
      TYPE(medium_nls) :: nls
      TYPE(medium_nlb) :: nlb
   END type medium_prop
@@ -30,7 +31,8 @@ MODULE common
   INTEGER, PARAMETER :: mtype_linear = 1,&
        mtype_nls = 2,&
        mtype_nlb_nonlocal = 3,&
-       mtype_nlb_dipole = 4
+       mtype_nlb_dipole = 4,&
+       mtype_thg_bulk = 31
 
   ! Solution data.
   TYPE solution
@@ -120,6 +122,55 @@ CONTAINS
     b%qd_tri = tri_quad_data('tri_gl13')
     b%qd_tetra = tetra_quad_data('tetra_gl4')
   END SUBROUTINE batch_defaults
+
+
+  ! Checks whether the batch contains nonlinear centrosymmetric materials.
+  FUNCTION is_nl_centrosym(b) RESULT(res)
+    TYPE(batch), INTENT(IN) :: b
+    LOGICAL :: res
+    INTEGER :: n
+
+    res = .FALSE.
+
+    DO n=1,SIZE(b%media)
+       IF(b%media(n)%type==mtype_nls .OR. b%media(n)%type==mtype_nlb_nonlocal) THEN
+          res = .TRUE.
+          RETURN
+       END IF
+    END DO
+  END FUNCTION is_nl_centrosym
+
+  ! Checks whether the batch contains nonlinear non-centrosymmetric materials.
+  FUNCTION is_nl_noncentrosym(b) RESULT(res)
+    TYPE(batch), INTENT(IN) :: b
+    LOGICAL :: res
+    INTEGER :: n
+
+    res = .FALSE.
+
+    DO n=1,SIZE(b%media)
+       IF(b%media(n)%type==mtype_nlb_dipole) THEN
+          res = .TRUE.
+          RETURN
+       END IF
+    END DO
+  END FUNCTION is_nl_noncentrosym
+
+  ! Checks whether the batch contains nonlinear materials for third harmonic generation (thg).
+  FUNCTION is_nl_thg(b) RESULT(res)
+    TYPE(batch), INTENT(IN) :: b
+    LOGICAL :: res
+    INTEGER :: n
+
+    res = .FALSE.
+
+    DO n=1,SIZE(b%media)
+       IF(b%media(n)%type==mtype_thg_bulk) THEN
+          res = .TRUE.
+          RETURN
+       END IF
+    END DO
+  END FUNCTION is_nl_thg
 
   SUBROUTINE delete_batch(b)
     TYPE(batch), INTENT(INOUT) :: b

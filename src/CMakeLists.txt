@@ -18,18 +18,20 @@ endif()
 
 #message($ENV{FC})
 if(CMAKE_Fortran_COMPILER MATCHES "ifort")
-	set(fortranFlagsRelease "-fpp -qopenmp -parallel -O2")
-	set(fortranFlagsDebug "-g -debug full -I${MKLROOT}/include")
-	set(exeLinkerFlags "-L${MKLROOT}/lib -Wl,-rpath,${MKLROOT}/lib -Wl,-rpath,${MKLROOT}/../compiler/lib/  -lmkl_intel_ilp64 -lmkl_intel_thread -lmkl_core -liomp5 -lpthread -lm -ldl")
-	#set(exeLinkerFlags "-L${MKLROOT}/lib -Wl,-rpath,${MKLROOT}/lib -Wl,-rpath,${MKLROOT}/../compiler/lib/  -lmkl_intel_ilp64 -lmkl_sequential -lmkl_core -lpthread -lm -ldl")
+	set(fortranFlagsRelease "-fpp -openmp -parallel -O2")
+	set(fortranFlagsDebug "-g -debug full -heap-arrays -traceback -check output_conversion -I${MKLROOT}/include")
+	# linker on Linux
+	# set(exeLinkerFlags "-L${MKLROOT}/lib/intel64 -lmkl_intel_lp64 -lmkl_intel_thread -lmkl_core -liomp5 -lpthread -lm -ldl")
+	# linker on macOS
+	set(exeLinkerFlags "-L${MKLROOT}/lib -Wl,-rpath,${MKLROOT}/lib -Wl,-rpath,${MKLROOT}/../compiler/lib/ -lmkl_intel_lp64 -lmkl_intel_thread -lmkl_core -liomp5 -lpthread -lm -ldl")
 
 	elseif(CMAKE_Fortran_COMPILER MATCHES "gfortran")
 	#elseif(CMAKE_Fortran_COMPILER MATCHES "gfortran-mp-4.8")
 	message("## gnu fortran compiler")
 	set(fortranFlagsRelease "-fopenmp  -std=f2008 -ffree-line-length-0 -DMKL_ILP64 -m64 -I${MKLROOT}/include -O3")
-	set(fortranFlagsDebug "-g -ggdb -DMKL_ILP64 -m64 -I${MKLROOT}/include -Wall -Wextra -Warray-temporaries -Wconversion -ffpe-trap=zero,overflow,underflow -finit-real=nan -fbacktrace -fcheck=all -fopenmp -std=f2008 -ffree-line-length-0")
-	set(exeLinkerFlags "-L${MKLROOT}/lib -L${MKLROOT}/../compiler/lib -Wl,-rpath,${MKLROOT}/lib -Wl,-rpath,${MKLROOT}/../compiler/lib/ -lmkl_intel_ilp64 -lmkl_intel_thread -lmkl_core -liomp5 -lpthread -lm -ldl")
-	#set(exeLinkerFlags "-L${MKLROOT}/lib -Wl,-rpath,${MKLROOT}/lib -Wl,-rpath,${MKLROOT}/../compiler/lib/ -lmkl_intel_ilp64 -lmkl_sequential -lmkl_core -lpthread -lm -ldl")
+	set(fortranFlagsDebug "-g -ggdb -DMKL_LP64 -m64 -I${MKLROOT}/include -Wall -Wextra -Warray-temporaries -Wconversion -ffpe-trap=zero,overflow,underflow -finit-real=nan -fbacktrace -fcheck=all -fopenmp -std=f2008 -ffree-line-length-0")
+	set(exeLinkerFlags "-L${MKLROOT}/lib -L${MKLROOT}/../compiler/lib -Wl,-rpath,${MKLROOT}/lib -Wl,-rpath,${MKLROOT}/../compiler/lib/ -lmkl_intel_lp64 -lmkl_intel_thread -lmkl_core -liomp5 -lpthread -lm -ldl")
+	#set(exeLinkerFlags "-L${MKLROOT}/lib -Wl,-rpath,${MKLROOT}/lib -Wl,-rpath,${MKLROOT}/../compiler/lib/ -lmkl_intel_lp64 -lmkl_sequential -lmkl_core -lpthread -lm -ldl")
 
 else()
 	message("## Unsupported fortran compiler!")
@@ -37,7 +39,7 @@ endif()
 message("################################")
 
 
-set(BUILD_TYPE "debug")
+set(BUILD_TYPE "release")
 
 if(BUILD_TYPE MATCHES "release")
  message("Building release")

@@ -104,9 +104,9 @@ CONTAINS
     DEALLOCATE(M)
   END SUBROUTINE sysmat_pmchwt
 
-  ! Computes the PMCHWT system matrix for second-harmonic problem.
+  ! Computes the PMCHWT system matrix for second/third-harmonic problem,
   ! Adds products of src_coef and the submatrices to src_vec.
-  ! Note that omega and ri must correspond to the SH case.
+  ! Note that omega and ri must correspond to the SH/TH case.
   ! Also the electric field group actions (gae) are the squares of
   ! actions in the linear problem.
   SUBROUTINE sysmat_pmchwt_nls(b, wlind, A, src_coef, src_vec)
@@ -128,16 +128,24 @@ CONTAINS
 
     nsources = SIZE(src_coef,4)
 
-    ! Second-harmonic frequency.
-    omega = 4.0_dp*pi*c0/b%sols(wlind)%wl
-    
+    ! Second-harmonic or third-harmonic frequency.
+    IF(is_nl_thg(b)) THEN
+        omega = 3.0_dp*2.0_dp*pi*c0/b%sols(wlind)%wl
+    ELSE
+        omega = 2.0_dp*2.0_dp*pi*c0/b%sols(wlind)%wl
+    END IF
+
     A(:,:,:) = 0.0_dp
 
     ALLOCATE(M(N,N))
 
     ! Loop through domains.
     DO nd=1,SIZE(b%domains)
-       ri = b%media(b%domains(nd)%medium_index)%prop(wlind)%shri
+       IF(is_nl_thg(b)) THEN
+           ri = b%media(b%domains(nd)%medium_index)%prop(wlind)%thri
+       ELSE
+           ri = b%media(b%domains(nd)%medium_index)%prop(wlind)%shri
+       END IF
        Zsi = (ri**2)/(eta0**2)
 
        ! Determine global edges indices to index basis functions.

@@ -239,6 +239,7 @@ CONTAINS
     CHARACTER (LEN=256) :: type, method, file, file2, file3
     COMPLEX (KIND=dp) :: val
     REAL (KIND=dp), DIMENSION(3,6) :: chi2
+    REAL (KIND=dp), DIMENSION(3,10) :: chi3
 
     IF(ALLOCATED(b%media)==.FALSE.) THEN
        WRITE(*,*) 'Error: no media allocated!'
@@ -258,6 +259,7 @@ CONTAINS
           DO n=1,b%nwl
              b%media(mindex)%prop(n)%ri = get_refind(TRIM(ADJUSTL(file)), b%sols(n)%wl)
              b%media(mindex)%prop(n)%shri = get_refind(TRIM(ADJUSTL(file)), b%sols(n)%wl*0.5_dp)
+             b%media(mindex)%prop(n)%thri = get_refind(TRIM(ADJUSTL(file)), b%sols(n)%wl*1.0_dp/3.0_dp)
           END DO
 
           WRITE(*,'(A,I0,A,A)') 'Set medium ', mindex, ' refractive index to ', TRIM(file)
@@ -268,6 +270,7 @@ CONTAINS
           DO n=1,b%nwl
              b%media(mindex)%prop(n)%ri = val
              b%media(mindex)%prop(n)%shri = val
+             b%media(mindex)%prop(n)%thri = val
           END DO
 
           WRITE(*,'(A,I0,A,"(",F6.3,",",F6.3,")")') 'Set medium ', mindex,&
@@ -342,6 +345,44 @@ CONTAINS
 
           DO n=1,b%nwl
              b%media(mindex)%prop(n)%nlb%chi2 = b%media(mindex)%prop(1)%nlb%chi2
+             b%media(mindex)%prop(n)%nlb%T = b%media(mindex)%prop(1)%nlb%T
+             b%media(mindex)%prop(n)%nlb%invT = b%media(mindex)%prop(1)%nlb%invT
+          END DO
+       ELSE
+          WRITE(*,*) 'Unrecongnized method for retrieveing medium properties!'
+          RETURN
+       END IF
+    ELSE IF(TRIM(type)=='thg-bulk') THEN
+       READ(line,*) mindex, type, method
+
+       b%media(mindex)%type = mtype_thg_bulk
+
+       IF(method=='file') THEN
+          READ(line,*) mindex, type, method, file, file2, file3
+
+          CALL get_matrix(TRIM(ADJUSTL(file)), chi3, 3, 10)
+          b%media(mindex)%prop(1)%nlb%chi3 = chi3
+
+          CALL get_matrix(TRIM(ADJUSTL(file2)), b%media(mindex)%prop(1)%nlb%T, 3, 3)
+          CALL get_matrix(TRIM(ADJUSTL(file3)), b%media(mindex)%prop(1)%nlb%invT, 3, 3)
+
+          WRITE(*,*) 'chi3'
+          WRITE(*,*) b%media(mindex)%prop(1)%nlb%chi3(1,:)
+          WRITE(*,*) b%media(mindex)%prop(1)%nlb%chi3(2,:)
+          WRITE(*,*) b%media(mindex)%prop(1)%nlb%chi3(3,:)
+
+          WRITE(*,*) 'crystal to lab'
+          WRITE(*,*) b%media(mindex)%prop(1)%nlb%T(1,:)
+          WRITE(*,*) b%media(mindex)%prop(1)%nlb%T(2,:)
+          WRITE(*,*) b%media(mindex)%prop(1)%nlb%T(3,:)
+
+          WRITE(*,*) 'lab to crystal'
+          WRITE(*,*) b%media(mindex)%prop(1)%nlb%invT(1,:)
+          WRITE(*,*) b%media(mindex)%prop(1)%nlb%invT(2,:)
+          WRITE(*,*) b%media(mindex)%prop(1)%nlb%invT(3,:)
+
+          DO n=1,b%nwl
+             b%media(mindex)%prop(n)%nlb%chi3 = b%media(mindex)%prop(1)%nlb%chi3
              b%media(mindex)%prop(n)%nlb%T = b%media(mindex)%prop(1)%nlb%T
              b%media(mindex)%prop(n)%nlb%invT = b%media(mindex)%prop(1)%nlb%invT
           END DO
@@ -794,7 +835,7 @@ CONTAINS
     TYPE(batch), INTENT(INOUT) :: b
     INTEGER :: wlindex, srcindex, dindex
     CHARACTER (LEN=256) :: oname, numstr
-    REAL (KIND=dp) :: omega
+    REAL (KIND=dp) :: omega, omega_nl
     COMPLEX (KIND=dp) :: ri
 
     READ(line,*) wlindex, srcindex, dindex
@@ -815,12 +856,19 @@ CONTAINS
     !     b%sols(wlindex)%x(:,:,srcindex), b%ga, omega, ri)
 
     IF(ALLOCATED(b%sols(wlindex)%nlx)) THEN
-       oname = TRIM(b%name) // TRIM(ADJUSTL(numstr)) // '-sh.msh'
-       
-       ri = b%media(b%domains(dindex)%medium_index)%prop(wlindex)%shri
+       ! Second-harmonic or third-harmonic frequency
+       IF(is_nl_thg(b)) THEN
+           oname = TRIM(b%name) // '-wl' // TRIM(ADJUSTL(numstr)) // '-scan-th.dat'
+           ri = b%media(b%domains(1)%medium_index)%prop(wlindex)%thri
+           omega_nl = 3.0_dp*omega
+       ELSE
+           oname = TRIM(b%name) // '-wl' // TRIM(ADJUSTL(numstr)) // '-scan-sh.dat'
+           ri = b%media(b%domains(1)%medium_index)%prop(wlindex)%shri
+           omega_nl = 2.0_dp*omega
+       END IF
        
        CALL field_mesh(oname, b%domains(dindex)%mesh, b%scale, b%mesh%nedges,&
-            b%sols(wlindex)%nlx(:,:,srcindex), b%ga, 2.0_dp*omega, ri)
+            b%sols(wlindex)%nlx(:,:,srcindex), b%ga, omega_nl, ri)
 
     END IF
   END SUBROUTINE read_nfms
@@ -1211,7 +1259,7 @@ CONTAINS
     CHARACTER (LEN=*), INTENT(IN) :: line
     TYPE(batch), INTENT(INOUT) :: b
     INTEGER :: iovar, npt, wlindex, n
-    REAL (KIND=dp) :: omega, theta1, theta2
+    REAL (KIND=dp) :: omega, omega_nl, theta1, theta2
     COMPLEX (KIND=dp) :: ri
     REAL (KIND=dp), DIMENSION(SIZE(b%src)) :: scatp
     CHARACTER (LEN=256) :: oname, numstr
@@ -1246,19 +1294,25 @@ CONTAINS
     CALL write_data(oname, RESHAPE(scatp,(/npt,npt/)))
 
     IF(ALLOCATED(b%sols(wlindex)%nlx)) THEN
-       oname = TRIM(b%name) // '-wl' // TRIM(ADJUSTL(numstr)) // '-scan-sh.dat'
-       
-       ! Second-harmonic frequency.
-       ri = b%media(b%domains(1)%medium_index)%prop(wlindex)%shri
+       ! Second-harmonic or third-harmonic frequency
+       IF(is_nl_thg(b)) THEN
+           oname = TRIM(b%name) // '-wl' // TRIM(ADJUSTL(numstr)) // '-scan-th.dat'
+           ri = b%media(b%domains(1)%medium_index)%prop(wlindex)%thri
+           omega_nl = 3.0_dp*omega
+       ELSE
+           oname = TRIM(b%name) // '-wl' // TRIM(ADJUSTL(numstr)) // '-scan-sh.dat'
+           ri = b%media(b%domains(1)%medium_index)%prop(wlindex)%shri
+           omega_nl = 2.0_dp*omega
+       END IF
 
        !$OMP PARALLEL DEFAULT(NONE)&
-       !$OMP SHARED(b,omega,ri,scatp,wlindex,theta1,theta2)&
+       !$OMP SHARED(b,omega_nl,ri,scatp,wlindex,theta1,theta2)&
        !$OMP PRIVATE(n)
        !$OMP DO SCHEDULE(STATIC)
        DO n=1,SIZE(b%src)
           !theta_max = ASIN(b%src(n)%napr/REAL(ri,KIND=dp))
 
-          CALL rcs_solangle(b%domains(1)%mesh, b%mesh%nedges, 2.0_dp*omega, ri, b%ga,&
+          CALL rcs_solangle(b%domains(1)%mesh, b%mesh%nedges, omega_nl, ri, b%ga,&
                b%sols(wlindex)%nlx(:,:,n), theta1, theta2, b%qd_tri, scatp(n))
        END DO
        !$OMP END DO
@@ -1322,7 +1376,7 @@ CONTAINS
     CHARACTER (LEN=*), INTENT(IN) :: line
     TYPE(batch), INTENT(INOUT) :: b
     INTEGER :: iovar, ntheta_rcs, nphi_rcs, wlindex, srcindex
-    REAL (KIND=dp) :: omega
+    REAL (KIND=dp) :: omega, omega_nl
     COMPLEX (KIND=dp) :: ri
     REAL (KIND=dp), DIMENSION(:,:), ALLOCATABLE :: rcsdata
     CHARACTER (LEN=256) :: oname, numstr
@@ -1348,12 +1402,18 @@ CONTAINS
 
     ! Nonlinear radar cross-sections.
     IF(ALLOCATED(b%sols(wlindex)%nlx)) THEN
-       oname = TRIM(b%name) // TRIM(ADJUSTL(numstr)) // '-sh.rcs'
+       ! Second-harmonic or third-harmonic frequency
+       IF(is_nl_thg(b)) THEN
+           oname = TRIM(b%name) // '-wl' // TRIM(ADJUSTL(numstr)) // '-scan-th.dat'
+           ri = b%media(b%domains(1)%medium_index)%prop(wlindex)%thri
+           omega_nl = 3.0_dp*omega
+       ELSE
+           oname = TRIM(b%name) // '-wl' // TRIM(ADJUSTL(numstr)) // '-scan-sh.dat'
+           ri = b%media(b%domains(1)%medium_index)%prop(wlindex)%shri
+           omega_nl = 2.0_dp*omega
+       END IF
        
-       ! Second-harmonic frequency.
-       ri = b%media(b%domains(1)%medium_index)%prop(wlindex)%shri
-       
-       CALL rcs(b%domains(1)%mesh, b%mesh%nedges, 2.0_dp*omega, ri, b%ga,&
+       CALL rcs(b%domains(1)%mesh, b%mesh%nedges, omega_nl, ri, b%ga,&
             b%sols(wlindex)%nlx(:,:,srcindex), ntheta_rcs, nphi_rcs, b%qd_tri, rcsdata)
        CALL write_data(oname, rcsdata)
 
