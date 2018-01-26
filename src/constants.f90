@@ -4,13 +4,14 @@
 ! Various constants for general use.
 MODULE constants
   IMPLICIT NONE
-  INTRINSIC SQRT
+  ! INTRINSIC SQRT
   INTEGER, PARAMETER :: dp = SELECTED_REAL_KIND(12)
-  REAL (KIND=dp), PARAMETER :: &
-       pi = 3.141592653589_dp, &
+  REAL (KIND=dp), PARAMETER ::  &
+       tol = 1.0D-12,           &
+       pi = 3.141592653589_dp,  &
        eps0 = 8.8541878176D-12, &
-       mu0 = 4*pi*1D-7, &
-       c0 = 2.997924580003D8, &
+       mu0 = 4*pi*1D-7,         &
+       c0 = 2.997924580003D8,   &
        eta0 = 3.767303134622D2
   REAL (KIND=dp), PARAMETER :: radtodeg = 180.0_dp/pi,&
        degtorad = pi/180.0_dp

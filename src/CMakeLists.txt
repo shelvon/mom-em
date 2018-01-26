@@ -19,19 +19,25 @@ endif()
 #message($ENV{FC})
 if(CMAKE_Fortran_COMPILER MATCHES "ifort")
 	set(fortranFlagsRelease "-fpp -openmp -parallel -O2")
-	set(fortranFlagsDebug "-g -debug full -heap-arrays -traceback -check output_conversion -I${MKLROOT}/include")
-	# linker on Linux
-	# set(exeLinkerFlags "-L${MKLROOT}/lib/intel64 -lmkl_intel_lp64 -lmkl_intel_thread -lmkl_core -liomp5 -lpthread -lm -ldl")
-	# linker on macOS
-	set(exeLinkerFlags "-L${MKLROOT}/lib -Wl,-rpath,${MKLROOT}/lib -Wl,-rpath,${MKLROOT}/../compiler/lib/ -lmkl_intel_lp64 -lmkl_intel_thread -lmkl_core -liomp5 -lpthread -lm -ldl")
-
-	elseif(CMAKE_Fortran_COMPILER MATCHES "gfortran")
-	#elseif(CMAKE_Fortran_COMPILER MATCHES "gfortran-mp-4.8")
+	#	set(fortranFlagsDebug "-g -debug full -heap-arrays -warn all -traceback -check all -I${MKLROOT}/include")
+	set(fortranFlagsDebug "-g -debug full -heap-arrays -assume none -traceback -I${MKLROOT}/include")
+	if(CMAKE_SYSTEM_NAME MATCHES "Linux")
+		# linker on Linux
+		message("## set the linker for Linux platform")
+		set(exeLinkerFlags "-L${MKLROOT}/lib/intel64 -lmkl_intel_lp64 -lmkl_intel_thread -lmkl_core -liomp5 -lpthread -lm -ldl")
+	elseif(CMAKE_SYSTEM_NAME MATCHES "Darwin")	
+		# linker on macOS
+		message("## set the linker for macOS platform")
+		set(exeLinkerFlags "-L${MKLROOT}/lib -Wl,-rpath,${MKLROOT}/lib -Wl,-rpath,${MKLROOT}/../compiler/lib/ -lmkl_intel_lp64 -lmkl_intel_thread -lmkl_core -liomp5 -lpthread -lm -ldl")
+	endif()
+	
+elseif(CMAKE_Fortran_COMPILER MATCHES "gfortran")
+#elseif(CMAKE_Fortran_COMPILER MATCHES "gfortran-mp-4.8")
 	message("## gnu fortran compiler")
 	set(fortranFlagsRelease "-fopenmp  -std=f2008 -ffree-line-length-0 -DMKL_ILP64 -m64 -I${MKLROOT}/include -O3")
 	set(fortranFlagsDebug "-g -ggdb -DMKL_LP64 -m64 -I${MKLROOT}/include -Wall -Wextra -Warray-temporaries -Wconversion -ffpe-trap=zero,overflow,underflow -finit-real=nan -fbacktrace -fcheck=all -fopenmp -std=f2008 -ffree-line-length-0")
 	set(exeLinkerFlags "-L${MKLROOT}/lib -L${MKLROOT}/../compiler/lib -Wl,-rpath,${MKLROOT}/lib -Wl,-rpath,${MKLROOT}/../compiler/lib/ -lmkl_intel_lp64 -lmkl_intel_thread -lmkl_core -liomp5 -lpthread -lm -ldl")
-	#set(exeLinkerFlags "-L${MKLROOT}/lib -Wl,-rpath,${MKLROOT}/lib -Wl,-rpath,${MKLROOT}/../compiler/lib/ -lmkl_intel_lp64 -lmkl_sequential -lmkl_core -lpthread -lm -ldl")
+	# set(exeLinkerFlags "-L${MKLROOT}/lib -Wl,-rpath,${MKLROOT}/lib -Wl,-rpath,${MKLROOT}/../compiler/lib/ -lmkl_intel_lp64 -lmkl_sequential -lmkl_core -lpthread -lm -ldl")
 
 else()
 	message("## Unsupported fortran compiler!")
@@ -62,12 +68,12 @@ endif()
 set(CMAKE_EXE_LINKER_FLAGS "${exeLinkerFlags}")
 
 add_executable(mom
-f77toms644/zbsubs.f
-f77toms644/zbesyh.f
-f77toms644/machcon.f
+toms644/zbsubs.f
+toms644/machcon.f90
 aux.f90
 constants.f90
 ffields.f90
+focal.f90
 interface.f90
 mesh.f90
 nlsurf.f90
@@ -88,6 +94,7 @@ linalg.f90
 nfpost.f90
 quad.f90
 source.f90
+pupil.f90
 sysmat.f90
 common.f90
 dipole.f90

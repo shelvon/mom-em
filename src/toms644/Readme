@@ -1,3 +1,24 @@
+C******Modification is based on 
+C https://github.com/certik/fortran-utils/tree/master/src/legacy/amos
+C      Three files, i1mach.f90, r1mach.f90 and d1mach.f90 is combined
+C      into a single file machcon.f90, in order to compatible with f90
+C      The other files are maintained from the original f77 codes.
+C
+C******Original Readme file starts after the following line.
+-----------------------------------------------------------------
+C      REMARK ON ALGORITHM 644, COLLECTED ALGORITHMS FROM ACM.
+C      THIS WORK PUBLISHED IN TRANSACTIONS ON MATHEMATICAL SOFTWARE,
+C      VOL. 21, NO. 4, December, 1995, P.  388--393.
+C
+C This file contains 6 files separated by lines of the form
+C         C*** filename
+C
+C The filenames in this file are:
+C
+C Readme               cbsubs.f             cqcbes.f            
+C machcon.f            zbsubs.f             zqcbes.f            
+C                                                               
+C
 C*** Readme
              INSTALLATION HINTS FOR ALGORITHM 644
 

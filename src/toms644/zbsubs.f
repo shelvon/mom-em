@@ -1418,7 +1418,7 @@ C-----------------------------------------------------------------------
       DO 80 I=1,N
 C----------------------------------------------------------------------
 C       CY(I) = CSGN*CY(I)-CSPN*CWRK(I): PRODUCTS ARE COMPUTED IN
-C       SCALED MODE IF CY(I) OR CWRK(I) ARE CLOSE TO UNDERFLOW TO
+C       SCALED MODE IF CY(I) OR CWRK(I) ARE CLOSE TO UNDERFLOW TO 
 C       PREVENT UNDERFLOW IN AN INTERMEDIATE COMPUTATION.
 C----------------------------------------------------------------------
         ZVR = CWRKR(I)

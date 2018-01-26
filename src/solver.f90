@@ -12,6 +12,68 @@ MODULE solver
   IMPLICIT NONE
 
 CONTAINS
+  ! calculate the focal field in the focal region
+  SUBROUTINE solve_focal(b)
+    TYPE(batch), INTENT(INOUT)  :: b
+    INTEGER                     :: w, s, nsrc
+    REAL (KIND=dp)              :: wl
+    COMPLEX (KIND=dp)           :: ri1, ri2
+    CHARACTER (LEN=256)         :: name
+
+    WRITE(*,*) '--- Begin wavelength batch ---'
+
+    ! Check that necessary input data exists.
+    IF(ALLOCATED(b%sols)==.FALSE.) THEN
+       WRITE(*,*) 'Setup wavelengths prior to solving!'
+       RETURN
+    END IF
+
+    IF(ALLOCATED(b%media)==.FALSE.) THEN
+       WRITE(*,*) 'Set up media prior to solving!'
+       RETURN
+    END IF
+
+    IF(ALLOCATED(b%src)==.FALSE.) THEN
+       WRITE(*,*) 'Set up source prior to solving!'
+       RETURN
+    END IF
+
+
+    IF((b%pupil%phase%type=='petal') .AND. (b%pupil%phase%petal%l+2 > b%focal%jMax)) THEN
+       WRITE(*,*) 'Set up jMax at least to l+2 for petal beam calculation'
+       RETURN
+    END IF
+
+    IF((b%pupil%phase%type=='vortex') .AND. (b%pupil%phase%vortex%charge+2 > b%focal%jMax)) THEN
+       WRITE(*,*) 'Set up jMax at least to charge+2 for vortex beam calculation'
+       RETURN
+    END IF
+
+    nsrc = SIZE(b%src)
+
+    ! Go through all given wavelengths.
+    DO w=1,b%nwl
+      wl = b%sols(w)%wl
+      ! ri1: refractive index of medium 1, before focusing lens
+      ! ri2: refractive index of medium 2, after focusing lens
+      ri1 = b%media(1)%prop(w)%ri
+      ri2 = b%media(2)%prop(w)%ri
+      DO s=1,nsrc
+        ! Calculate the focal field at (rho,varphi,z) by including pupil function.
+        ! Field evaluation points (rho,varphi,z) <-- (x,y,z)
+        ! is a 3D grid stored in b%focal%grid.
+
+        WRITE(name, '(A,I0,A,I0)') '-iw',w,'-is',s
+        name = TRIM(b%name) // '-focus' // TRIM(ADJUSTL(name))
+        CALL field_focal(wl,ri1,ri2,b%src(s),b%pupil,b%focal,name)
+        ! e=b%focal%e
+        ! h=b%focal%h
+      END DO! s=1,nsrc
+
+    END DO! w=1,b%nwl
+
+  END SUBROUTINE solve_focal
+
   ! Solves linear and optionally second-order scattering problems
   ! for a range of wavelengths as specified in input structure b.
   SUBROUTINE solve_batch(b)

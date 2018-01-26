@@ -6,6 +6,8 @@
 ! code that is used to define certain types of problems via the user interface.
 MODULE common
   USE source
+  USE pupil
+  USE focal
   USE greenprd
   USE nlsurf
   USE nlbulk
@@ -85,6 +87,13 @@ MODULE common
 
      ! nwl: Number of wavelengths.
      INTEGER :: nwl
+
+     ! Pupil function for focused beam
+     TYPE (data_pupil) :: pupil
+
+     ! data of focused beam
+     ! TYPE (data_focal), DIMENSION(:), ALLOCATABLE :: focal ! multiple wavelengths if needed
+     TYPE (data_focal) :: focal
 
      ! Source data.
      TYPE(srcdata), DIMENSION(:), ALLOCATABLE :: src

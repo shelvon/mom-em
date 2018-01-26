@@ -122,6 +122,29 @@ CONTAINS
     !END DO
   END SUBROUTINE read_fdom
 
+  ! switch between solving method
+  SUBROUTINE read_solv(line, b)
+    CHARACTER (LEN=*), INTENT(IN) :: line
+    TYPE(batch), INTENT(INOUT) :: b
+    CHARACTER (LEN=32) :: method
+    INTEGER :: IOEM
+
+    READ(line, *, IOSTAT = IOEM) method ! Read method specification, if any
+    IF (IOEM /= 0) THEN ! If no method specified, use the default one.
+       CALL solve_batch(b)
+    ELSE IF(method=='mode') THEN
+       WRITE(*,*) "Solving the modes ..."
+       ! to be developed
+    ELSE IF(method=='focal') THEN
+       WRITE(*,*) "Calculating the focal field only ..."
+       READ(line, *, IOSTAT = IOEM) method, b%focal%jMax ! Read method specification, if any
+       ! jMax is the largest order of Bessel function of first kind to be included
+       ! jMax is also related to the order of Fourier series expansion
+       CALL solve_focal(b)
+    END IF
+
+  END SUBROUTINE read_solv
+
   SUBROUTINE read_sbnd(line, b)
     CHARACTER (LEN=*), INTENT(IN) :: line
     TYPE(batch), INTENT(INOUT) :: b
@@ -608,6 +631,114 @@ CONTAINS
        END IF
     END IF
   END SUBROUTINE read_ssrc
+
+  ! Define the pupil function in cylindrical coordinate as P(theta, phi)
+  ! which writes as P(theta, phi)=A(theta, phi)*exp(i*Phi(theta, phi)).
+  SUBROUTINE read_pfun(line, b)
+    CHARACTER (LEN=*), INTENT(IN) :: line
+    TYPE(batch), INTENT(INOUT) :: b
+
+    TYPE(data_pupil) :: pupil
+    CHARACTER (LEN=32) :: pupil_type
+    CHARACTER (LEN=32) :: aperture_name
+    CHARACTER (LEN=32) :: phase_name
+    INTEGER :: intervals_n
+
+    READ(line,*) pupil_type
+
+    IF(pupil_type=='analytical') THEN
+      WRITE(*,*) 'Pupil function type is set to be analytical.'
+      pupil%type = pupil_type
+
+      READ(line,*) pupil_type, aperture_name
+      IF(aperture_name=='circ') THEN
+        READ(line,*) pupil_type, pupil%aperture%type, pupil%aperture%circ%r, phase_name
+
+        IF(phase_name=='rect') THEN
+          READ(line,*)  pupil_type, aperture_name, pupil%aperture%circ%r,   &
+                        pupil%phase%type, pupil%phase%rect%delta, intervals_n
+          ALLOCATE(pupil%phase%rect%intervals(1:2,1:intervals_n))
+          pupil%phase%rect%intervals_n = intervals_n
+          READ(line,*)  pupil_type, aperture_name, pupil%aperture%circ%r,   &
+                        phase_name, pupil%phase%rect%delta, intervals_n,    &
+                        pupil%phase%rect%intervals(1:2,1:intervals_n)
+
+          b%pupil=pupil
+        ELSE IF(phase_name=='vortex') THEN
+          READ(line,*)  pupil_type, aperture_name, pupil%aperture%circ%r,   &
+                        pupil%phase%type, pupil%phase%vortex%charge
+
+          b%pupil=pupil
+        ELSE IF(phase_name=='petal') THEN
+          READ(line,*)  pupil_type, aperture_name, pupil%aperture%circ%r,   &
+                        pupil%phase%type, pupil%phase%petal%l
+
+          b%pupil=pupil
+        END IF
+      ELSE IF(aperture_name=='ring') THEN
+        WRITE(*,*) 'Not yet implemented argument value!'
+      ELSE
+        WRITE(*,*) 'Unrecognized source argument value!'
+        STOP
+      END IF
+    ELSE
+      WRITE(*,*) 'Please set either analytical or numerical!'
+      STOP
+    END IF
+
+  END SUBROUTINE read_pfun
+
+  ! Define the focal region where the focal field is calculated.
+  ! RECURSIVE SUBROUTINE read_fcrg(line, b)
+  SUBROUTINE read_fcrg(line, b)
+    CHARACTER (LEN=*), INTENT(IN) :: line
+    TYPE(batch), INTENT(INOUT) :: b
+
+    CHARACTER (LEN=1)   :: pl
+
+    READ(line,*)    pl, b%focal%nx, b%focal%xa, b%focal%xb, &
+                    pl, b%focal%ny, b%focal%ya, b%focal%yb, &
+                    pl, b%focal%nz, b%focal%za, b%focal%zb
+    ! WRITE(*,*) b%focal%xa
+
+    ALLOCATE(b%focal%x(1:b%focal%nx), b%focal%y(1:b%focal%ny), b%focal%z(1:b%focal%nz))
+    ALLOCATE(b%focal%gridx(1:b%focal%ny, 1:b%focal%nx, 1:b%focal%nz))
+    ALLOCATE(b%focal%gridy(1:b%focal%ny, 1:b%focal%nx, 1:b%focal%nz))
+    ALLOCATE(b%focal%gridz(1:b%focal%ny, 1:b%focal%nx, 1:b%focal%nz))
+    ALLOCATE(b%focal%grid(3,1:b%focal%ny, 1:b%focal%nx, 1:b%focal%nz))
+
+    CALL meshgrid(b%focal)
+
+!    IF(pl=='x') THEN
+!      READ(line,*) pl, n
+!      IF(n==1) THEN
+!        READ(line,*) pl, b%focal%nx, b%focal%x0
+!        line_temp = line
+!        line_temp = line_temp((LEN_TRIM(pl)+LEN_TRIM(n)+LEN_TRIM(b%focal%x0))&
+!                    :LEN_TRIM(line_temp))
+!      ELSE IF(n>1) THEN
+!        READ(line,*) pl, b%focal%nx, b%focal%xa, b%focal%xb
+!        line_temp = line
+!        line_temp = line_temp((LEN_TRIM(pl)+LEN_TRIM(n)+LEN_TRIM(b%focal%xa)+LEN_TRIM(b%focal%xb))&
+!                    :LEN_TRIM(line_temp))
+!      END IF
+!    ELSE IF (pl=='y') THEN
+!      READ(line,*) pl, n
+!      IF(n==1) THEN
+!        READ(line,*) pl, b%focal%ny, b%focal%y0
+!      ELSE IF(n>1) THEN
+!        READ(line,*) pl, b%focal%ny, b%focal%ya, b%focal%yb
+!      END IF
+!    ELSE IF (pl=='z') THEN
+!      READ(line,*) pl, n
+!      IF(n==1) THEN
+!        READ(line,*) pl, b%focal%nz, b%focal%z0
+!      ELSE IF(n>1) THEN
+!        READ(line,*) pl, b%focal%nz, b%focal%za, b%focal%zb
+!      END IF
+!    END IF
+
+  END SUBROUTINE read_fcrg
 
   SUBROUTINE read_npgf(line, b)
     CHARACTER (LEN=*), INTENT(IN) :: line
@@ -1772,8 +1903,13 @@ CONTAINS
           CALL read_ssrc(line, b)
        ELSE IF(scmd=='osrc') THEN
           CALL read_osrc(line, b)
+       ELSE IF(scmd=='pfun') THEN
+          CALL read_pfun(line, b)
+       ELSE IF(scmd=='fcrg') THEN
+          CALL read_fcrg(line, b)
        ELSE IF(scmd=='solv') THEN
-          CALL solve_batch(b)
+          ! CALL solve_batch(b)
+          CALL read_solv(line,b)
        ELSE IF(scmd=='npgf') THEN
           CALL read_npgf(line,b)
        ELSE IF(scmd=='ipgw') THEN

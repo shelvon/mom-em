@@ -54,6 +54,18 @@ CONTAINS
     filename((n-2):n) = ext
   END SUBROUTINE replace_ext
 
+  FUNCTION factorial_n(n) RESULT(res)
+    INTEGER, INTENT(IN) :: n
+    REAL (KIND=dp) :: res
+    INTEGER :: i
+
+    res = 1.0_dp
+
+    DO i=2,n
+       res = res*REAL(i,KIND=dp)
+    END DO
+  END FUNCTION factorial_n
+
   ! Linear interpolation between start and end with t in [0,1].
   FUNCTION linterp(start, end, t) RESULT(res)
     REAL (KIND=dp), INTENT(IN) :: start, end, t
