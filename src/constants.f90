@@ -5,14 +5,21 @@
 MODULE constants
   IMPLICIT NONE
   ! INTRINSIC SQRT
+
   INTEGER, PARAMETER :: dp = SELECTED_REAL_KIND(12)
-  REAL (KIND=dp), PARAMETER ::  &
-       tol = 1.0D-12,           &
-       pi = 3.141592653589_dp,  &
-       eps0 = 8.8541878176D-12, &
-       mu0 = 4*pi*1D-7,         &
-       c0 = 2.997924580003D8,   &
-       eta0 = 3.767303134622D2
+  ! single, double and quadruple precision,
+  ! by "Metcalf, Michael, et.al., 2011. Modern Fortran Explained. 4th Edition
+  !  INTEGER, PARAMETER ::                             &
+  !    sp = KIND(1.0),                                 &
+  !    dp = SELECTED_REAL_KIND(2*PRECISION(1.0_sp)),   &
+  !    qp = SELECTED_REAL_KIND(2*PRECISION(1.0_dp))
+  REAL (KIND=dp), PARAMETER ::      &
+       tol = 1.0E-12_dp,            &
+       pi = 3.141592653589E0_dp,    &
+       eps0 = 8.8541878176E-12_dp,  &
+       mu0 = 4*pi*1E-7_dp,          &
+       c0 = 2.997924580003E8_dp,    &
+       eta0 = 3.767303134622E2_dp
   REAL (KIND=dp), PARAMETER :: radtodeg = 180.0_dp/pi,&
        degtorad = pi/180.0_dp
   INTEGER, PARAMETER :: prd_none = 1,&

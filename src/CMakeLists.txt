@@ -45,7 +45,7 @@ endif()
 message("################################")
 
 
-set(BUILD_TYPE "release")
+set(BUILD_TYPE "debug")
 
 if(BUILD_TYPE MATCHES "release")
  message("Building release")
