@@ -6,6 +6,7 @@
 ! (see common.f90) in the most frequent uses.
 MODULE interface
   USE solver
+  USE modes
   USE diffr
   USE ffields
   USE cs
@@ -134,7 +135,7 @@ CONTAINS
        CALL solve_batch(b)
     ELSE IF(method=='mode') THEN
        WRITE(*,*) "Solving the modes ..."
-       ! to be developed
+       CALL modes_mueller(b)
     ELSE IF(method=='focal') THEN
        WRITE(*,*) "Calculating the focal field only ..."
        READ(line, *, IOSTAT = IOEM) method, b%focal%jMax ! Read method specification, if any
@@ -964,44 +965,51 @@ CONTAINS
   SUBROUTINE read_nfms(line, b)
     CHARACTER (LEN=*), INTENT(IN) :: line
     TYPE(batch), INTENT(INOUT) :: b
-    INTEGER :: wlindex, srcindex, dindex
+    INTEGER :: wlindex, srcindex, modeindex, dindex
     CHARACTER (LEN=256) :: oname, numstr
     REAL (KIND=dp) :: omega, omega_nl
     COMPLEX (KIND=dp) :: ri
 
-    READ(line,*) wlindex, srcindex, dindex
-
-    WRITE(*,*) 'command nfms'
-    WRITE(*,*) 'srcindex=',srcindex,'; pos:',b%src(srcindex)%pos
-
-    WRITE(numstr, '(A,I0,A,I0,A,I0)') '-wl', wlindex, '-s', srcindex, '-d', dindex
-    oname = TRIM(b%name) // TRIM(ADJUSTL(numstr)) // '.msh'
+    READ(line,*) wlindex, srcindex, modeindex, dindex
 
     omega = 2.0_dp*pi*c0/b%sols(wlindex)%wl
     ri = b%media(b%domains(dindex)%medium_index)%prop(wlindex)%ri
-       
-    CALL field_mesh(oname, b%domains(dindex)%mesh, b%scale, b%mesh%nedges,&
-         b%sols(wlindex)%x(:,:,srcindex), b%ga, omega, ri)
 
-    !CALL gradPnls_mesh('gradPnls.msh', b%domains(dindex)%mesh, b%scale, b%mesh%nedges,&
-    !     b%sols(wlindex)%x(:,:,srcindex), b%ga, omega, ri)
+    WRITE(*,*) 'command nfms'
+    IF(srcindex/=0) THEN
+        WRITE(*,*) 'srcindex=',srcindex,'; pos:',b%src(srcindex)%pos
 
-    IF(ALLOCATED(b%sols(wlindex)%nlx)) THEN
-       ! Second-harmonic or third-harmonic frequency
-       IF(is_nl_thg(b)) THEN
-           oname = TRIM(b%name) // '-wl' // TRIM(ADJUSTL(numstr)) // '-scan-th.dat'
-           ri = b%media(b%domains(1)%medium_index)%prop(wlindex)%thri
-           omega_nl = 3.0_dp*omega
-       ELSE
-           oname = TRIM(b%name) // '-wl' // TRIM(ADJUSTL(numstr)) // '-scan-sh.dat'
-           ri = b%media(b%domains(1)%medium_index)%prop(wlindex)%shri
-           omega_nl = 2.0_dp*omega
-       END IF
-       
-       CALL field_mesh(oname, b%domains(dindex)%mesh, b%scale, b%mesh%nedges,&
-            b%sols(wlindex)%nlx(:,:,srcindex), b%ga, omega_nl, ri)
+        WRITE(numstr, '(A,I0,A,I0,A,I0)') '-wl', wlindex, '-s', srcindex, '-d', dindex
+        oname = TRIM(b%name) // TRIM(ADJUSTL(numstr)) // '.msh'
 
+        CALL field_mesh(oname, b%domains(dindex)%mesh, b%scale, b%mesh%nedges,&
+             b%sols(wlindex)%x(:,:,srcindex), b%ga, omega, ri)
+
+        !CALL gradPnls_mesh('gradPnls.msh', b%domains(dindex)%mesh, b%scale, b%mesh%nedges,&
+        !     b%sols(wlindex)%x(:,:,srcindex), b%ga, omega, ri)
+
+        IF(ALLOCATED(b%sols(wlindex)%nlx)) THEN
+           oname = TRIM(b%name) // TRIM(ADJUSTL(numstr)) // '-sh.msh'
+
+           ri = b%media(b%domains(dindex)%medium_index)%prop(wlindex)%shri
+
+           CALL field_mesh(oname, b%domains(dindex)%mesh, b%scale, b%mesh%nedges,&
+                b%sols(wlindex)%nlx(:,:,srcindex), b%ga, 2.0_dp*omega, ri)
+
+        END IF
     END IF
+
+    IF(modeindex/=0) THEN
+        WRITE(*,*) 'modeindex=',modeindex
+        WRITE(numstr, '(A,I0,A,I0,A,I0)') '-wl', wlindex, '-m', modeindex, '-d', dindex
+
+        oname = TRIM(b%name) // TRIM(ADJUSTL(numstr)) // '.msh'
+!        CALL field_mode_mesh(oname, b%domains(dindex)%mesh, b%scale, b%mesh%nedges,&
+!             b%sols(wlindex)%eigvec(:,modeindex), omega, ri)
+        CALL field_mesh(oname, b%domains(dindex)%mesh, b%scale, b%mesh%nedges,&
+             b%sols(wlindex)%x(:,:,modeindex), b%ga, omega, ri)
+    END IF
+
   END SUBROUTINE read_nfms
 
   SUBROUTINE read_nfpl(line, b)

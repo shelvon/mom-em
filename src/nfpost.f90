@@ -164,6 +164,81 @@ CONTAINS
 
   END SUBROUTINE field_domain
 
+  SUBROUTINE field_mode_mesh(name, mesh, scale, nedgestot, eigvec, omega, ri)
+    CHARACTER (LEN=*), INTENT(IN) :: name
+    TYPE(mesh_container), INTENT(IN) :: mesh
+    REAL (KIND=dp), INTENT(IN) :: scale, omega
+    COMPLEX (KIND=dp), DIMENSION(:), INTENT(IN) :: eigvec
+    INTEGER, INTENT(IN) :: nedgestot
+    COMPLEX (KIND=dp), INTENT(IN) :: ri
+
+    INTEGER :: n, n2, q, index
+    COMPLEX (KIND=dp), DIMENSION(3,mesh%nfaces) :: ef, hf
+    COMPLEX (KIND=dp), DIMENSION(3) :: et, ht
+    COMPLEX (KIND=dp) :: en, hn
+    COMPLEX (KIND=dp) :: eps
+    REAL (KIND=dp), DIMENSION(3) :: fn, nor
+    CHARACTER (LEN=256) :: oname, numstr
+    TYPE(mesh_container) :: mesh2
+
+    WRITE(*,*) 'Computing near fields of the eigen mode on particle mesh.'
+
+    eps = (ri**2)*eps0
+
+    mesh2%nnodes = mesh%nnodes
+    mesh2%nfaces = mesh%nfaces
+    ALLOCATE(mesh2%nodes(mesh2%nnodes))
+    ALLOCATE(mesh2%faces(mesh2%nfaces))
+
+    DO n=1,mesh%nnodes
+      mesh2%nodes(n)%p =mesh%nodes(n)%p
+    END DO
+
+    DO n=1,mesh%nfaces
+      mesh2%faces(n)%node_indices(:) = mesh%faces(n)%node_indices(:)
+      mesh2%faces(n)%n = mesh%faces(n)%n
+    END DO
+
+    DO n=1,mesh%nfaces
+
+        et(:) = 0.0_dp
+        en = 0.0_dp
+
+        ht(:) = 0.0_dp
+        hn = 0.0_dp
+
+        nor = mesh%faces(n)%n
+
+        DO q=1,3
+            index = mesh%faces(n)%edge_indices(q)
+            index = mesh%edges(index)%parent_index
+
+            fn = crossr(mesh%faces(n)%n, rwg(mesh%faces(n)%cp, n, q, mesh))
+
+            ht = ht - fn*eigvec(index)
+            hn = hn + rwgDiv(n, q, mesh)*eigvec(nedgestot + index)
+
+            et = et + fn*eigvec(nedgestot + index)
+            en = en + rwgDiv(n, q, mesh)*eigvec(index)
+        END DO
+
+        en = en/((0,1)*omega*eps)
+        hn = hn/((0,1)*omega*mu0)
+
+        ef(:,n) = et + nor*en
+        hf(:,n) = ht + nor*hn
+
+    END DO
+
+    CALL save_vector_fields_msh(name, mesh2, ef, hf, scale)
+
+    WRITE(*,*) 'Maximum of |E| is ',&
+         MAXVAL(SQRT(ABS(ef(1,:))**2 + ABS(ef(2,:))**2 + ABS(ef(3,:))**2))
+
+    DEALLOCATE(mesh2%nodes, mesh2%faces)
+
+  END SUBROUTINE field_mode_mesh
+
   SUBROUTINE field_mesh(name, mesh, scale, nedgestot, x, ga, omega, ri)
     CHARACTER (LEN=*), INTENT(IN) :: name
     TYPE(mesh_container), INTENT(IN) :: mesh

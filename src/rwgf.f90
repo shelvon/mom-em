@@ -31,6 +31,7 @@ CONTAINS
     END IF
   END FUNCTION rwg
 
+  ! surface divergence of fn: div_S fn = l_n/A_n
   FUNCTION rwgDiv(faceind, edgeind, mesh) RESULT(res)
     INTEGER, INTENT(IN) :: faceind, edgeind
     TYPE(mesh_container), INTENT(IN) :: mesh
@@ -51,6 +52,7 @@ CONTAINS
     res = sign*L/A
   END FUNCTION rwgDiv
 
+  ! vector basis function: f_n(r)=l_n/2/A_n*\rho_n
   SUBROUTINE vrwg(r, faceind, edgeind, mesh, res)
     REAL (KIND=dp), DIMENSION(:,:), INTENT(IN) :: r
     INTEGER, INTENT(IN) :: faceind, edgeind

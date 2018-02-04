@@ -7,7 +7,7 @@
 ! with source point r'.
 MODULE srcint
   USE quad
-  USE int
+  USE intbase
   USE rwgf
   USE green
   USE greenprd
@@ -25,7 +25,7 @@ CONTAINS
     COMPLEX (KIND=dp), INTENT(IN) :: k
     TYPE(prdnfo), POINTER, INTENT(IN) :: prd
 
-    COMPLEX (KIND=dp) :: res, aint, phase
+    COMPLEX (KIND=dp) :: res, auxint, phase
     REAL (KIND=dp), DIMENSION(3) :: rho
     INTEGER :: n, m
 
@@ -41,9 +41,9 @@ CONTAINS
                 phase = exp((0,1)*(prd%coef(prd%cwl)%k0x*rho(1) + prd%coef(prd%cwl)%k0y*rho(2)))
              END IF
 
-             aint = 1.0_dp/(4.0_dp*pi)*intK1m1(r-rho, faceind, edgeind, mesh) &
+             auxint = 1.0_dp/(4.0_dp*pi)*intK1m1(r-rho, faceind, edgeind, mesh) &
                   - (k**2)/(8.0_dp*pi)*intK11(r-rho, faceind, edgeind, mesh)
-             res = res + aint*phase
+             res = res + auxint*phase
           END DO
        END DO
     ELSE
@@ -71,7 +71,7 @@ CONTAINS
     REAL (KIND=dp), DIMENSION(3,qd%num_nodes) :: qpn
     REAL (KIND=dp) :: divfn
     COMPLEX (KIND=dp), DIMENSION(qd%num_nodes) :: gv
-    COMPLEX (KIND=dp) :: tmp, aint
+    COMPLEX (KIND=dp) :: tmp, auxint
     LOGICAL :: singular
 
     singular = .FALSE.
@@ -107,13 +107,13 @@ CONTAINS
     DO edgeind=1,3
        divfn = rwgDiv(faceind,edgeind,mesh)
 
-       aint = 0.0_dp
+       auxint = 0.0_dp
 
        IF(singular) THEN
-          aint = intK1singular(MATMUL(TRANSPOSE(ga%j),r), faceind, edgeind, mesh, k, prd)
+          auxint = intK1singular(MATMUL(TRANSPOSE(ga%j),r), faceind, edgeind, mesh, k, prd)
        END IF
 
-       res(edgeind) = tmp*divfn + aint
+       res(edgeind) = tmp*divfn + auxint
     END DO
   END FUNCTION intK1
 
@@ -125,7 +125,7 @@ CONTAINS
     COMPLEX (KIND=dp), INTENT(IN) :: k
     TYPE(prdnfo), POINTER, INTENT(IN) :: prd
 
-    COMPLEX (KIND=dp), DIMENSION(3) :: res, aint
+    COMPLEX (KIND=dp), DIMENSION(3) :: res, auxint
     COMPLEX (KIND=dp) :: phase
     REAL (KIND=dp), DIMENSION(3) :: rho
     INTEGER :: n, m
@@ -142,9 +142,9 @@ CONTAINS
                 phase = exp((0,1)*(prd%coef(prd%cwl)%k0x*rho(1) + prd%coef(prd%cwl)%k0y*rho(2)))
              END IF
 
-             aint = 1.0_dp/(4.0_dp*pi)*intK2m1(r-rho, faceind, edgeind, mesh) &
+             auxint = 1.0_dp/(4.0_dp*pi)*intK2m1(r-rho, faceind, edgeind, mesh) &
                   - (k**2)/(8.0_dp*pi)*intK21(r-rho, faceind, edgeind, mesh)
-             res = res + aint*phase
+             res = res + auxint*phase
           END DO
        END DO
     ELSE
@@ -166,7 +166,7 @@ CONTAINS
     TYPE(quad_data), INTENT(IN) :: qd
 
     COMPLEX (KIND=dp), DIMENSION(3,3) :: res
-    COMPLEX (KIND=dp), DIMENSION(3) :: aint
+    COMPLEX (KIND=dp), DIMENSION(3) :: auxint
     INTEGER :: edgeind, nweights, t
     REAL (KIND=dp) :: An
     REAL (KIND=dp), DIMENSION(3,qd%num_nodes) :: qpn, qpn2
@@ -209,13 +209,13 @@ CONTAINS
     DO edgeind=1,3
        CALL vrwg(qpn(:,:),faceind,edgeind,mesh,fv)
 
-       aint = 0.0_dp
+       auxint = 0.0_dp
 
        IF(singular) THEN
-          aint = intK2singular(MATMUL(TRANSPOSE(ga%j),r), faceind, edgeind, mesh, k, prd)
+          auxint = intK2singular(MATMUL(TRANSPOSE(ga%j),r), faceind, edgeind, mesh, k, prd)
        END IF
        
-       res(:,edgeind) = MATMUL(fv,gv) + aint
+       res(:,edgeind) = MATMUL(fv,gv) + auxint
 
        IF(ga%id/=gid_identity) THEN
           res(:,edgeind) = MATMUL(ga%j, res(:,edgeind))
@@ -231,7 +231,7 @@ CONTAINS
     COMPLEX (KIND=dp), INTENT(IN) :: k
     TYPE(prdnfo), POINTER, INTENT(IN) :: prd
 
-    COMPLEX (KIND=dp), DIMENSION(3) :: res, aint
+    COMPLEX (KIND=dp), DIMENSION(3) :: res, auxint
     COMPLEX (KIND=dp) :: phase
     REAL (KIND=dp), DIMENSION(3) :: rho
     INTEGER :: n, m
@@ -248,9 +248,9 @@ CONTAINS
                 phase = exp((0,1)*(prd%coef(prd%cwl)%k0x*rho(1) + prd%coef(prd%cwl)%k0y*rho(2)))
              END IF
 
-             aint = 1.0_dp/(4.0_dp*pi)*intK3m1(r-rho, faceind, edgeind, mesh) &
+             auxint = 1.0_dp/(4.0_dp*pi)*intK3m1(r-rho, faceind, edgeind, mesh) &
                   - (k**2)/(8.0_dp*pi)*intK31(r-rho, faceind, edgeind, mesh)
-             res = res + aint*phase
+             res = res + auxint*phase
           END DO
        END DO
     ELSE
@@ -272,7 +272,7 @@ CONTAINS
     TYPE(quad_data), INTENT(IN) :: qd
 
     COMPLEX (KIND=dp), DIMENSION(3,3) :: res
-    COMPLEX (KIND=dp), DIMENSION(3) :: aint
+    COMPLEX (KIND=dp), DIMENSION(3) :: auxint
     INTEGER :: t, nweights, edgeind
     REAL (KIND=dp) :: An, divfn
     REAL (KIND=dp), DIMENSION(3,qd%num_nodes) :: qpn
@@ -315,14 +315,14 @@ CONTAINS
     DO edgeind=1,3
        divfn = rwgDiv(faceind,edgeind,mesh)
 
-       aint = 0.0_dp
+       auxint = 0.0_dp
 
        IF(singular) THEN
-          aint = intK3singular(MATMUL(TRANSPOSE(ga%j),r), faceind, edgeind, mesh, k, prd)*divfn
-          aint = MATMUL(ga%j, aint)
+          auxint = intK3singular(MATMUL(TRANSPOSE(ga%j),r), faceind, edgeind, mesh, k, prd)*divfn
+          auxint = MATMUL(ga%j, auxint)
        END IF
 
-       res(:,edgeind) = tmp*divfn + aint
+       res(:,edgeind) = tmp*divfn + auxint
     END DO
   END FUNCTION intK3
 
@@ -334,7 +334,7 @@ CONTAINS
     COMPLEX (KIND=dp), INTENT(IN) :: k
     TYPE(prdnfo), POINTER, INTENT(IN) :: prd
 
-    COMPLEX (KIND=dp), DIMENSION(3) :: res, aint
+    COMPLEX (KIND=dp), DIMENSION(3) :: res, auxint
     COMPLEX (KIND=dp) :: phase
     REAL (KIND=dp), DIMENSION(3) :: rho
     INTEGER :: n, m
@@ -352,9 +352,9 @@ CONTAINS
                    phase = exp((0,1)*(prd%coef(prd%cwl)%k0x*rho(1) + prd%coef(prd%cwl)%k0y*rho(2)))
                 END IF
 
-                aint = 1.0_dp/(4.0_dp*pi)*intK4m1(r-rho, faceind, edgeind, mesh) &
+                auxint = 1.0_dp/(4.0_dp*pi)*intK4m1(r-rho, faceind, edgeind, mesh) &
                      - (k**2)/(8.0_dp*pi)*intK41(r-rho, faceind, edgeind, mesh)
-                res = res + aint*phase
+                res = res + auxint*phase
              END IF
           END DO
        END DO
@@ -378,7 +378,7 @@ CONTAINS
     TYPE(quad_data), INTENT(IN) :: qd
 
     COMPLEX (KIND=dp), DIMENSION(3,3) :: res
-    COMPLEX (KIND=dp), DIMENSION(3) :: aint
+    COMPLEX (KIND=dp), DIMENSION(3) :: auxint
     INTEGER :: t, nweights, n, m, edgeind
     REAL (KIND=dp) :: An
     REAL (KIND=dp), DIMENSION(3,qd%num_nodes) :: qpn, qpn2
@@ -435,15 +435,55 @@ CONTAINS
 
        CALL vcrosscr(ggv, fv, nweights, tmp)
 
-       aint = 0.0_dp
+       auxint = 0.0_dp
 
        IF(singular) THEN
-          aint = intK4singular(MATMUL(TRANSPOSE(ga%j),r), faceind, edgeind, mesh, k, prd, tfaceind)
-          !aint = MATMUL(ga%j, aint)/ga%detj
-          aint = MATMUL(ga%j, aint)*ga%detj
+          auxint = intK4singular(MATMUL(TRANSPOSE(ga%j),r), faceind, edgeind, mesh, k, prd, tfaceind)
+          !auxint = MATMUL(ga%j, auxint)/ga%detj
+          auxint = MATMUL(ga%j, auxint)*ga%detj
        END IF
 
-       res(:,edgeind) = MATMUL(tmp,qd%weights)*An + aint
+       res(:,edgeind) = MATMUL(tmp,qd%weights)*An + auxint
     END DO
   END FUNCTION intK4
+
+  ! Integration with smooth Green's function for the use in Mueller formulation.
+  FUNCTION intK1Mueller(r, faceind, mesh, k, ga, prd, near, qd) RESULT(res)
+    TYPE(mesh_container), INTENT(IN) :: mesh
+    COMPLEX (KIND=dp), INTENT(IN) :: k
+    REAL (KIND=dp), DIMENSION(3), INTENT(IN) :: r
+    INTEGER, INTENT(IN) :: faceind
+    TYPE(group_action), INTENT(IN) :: ga
+    TYPE(prdnfo), POINTER, INTENT(IN) :: prd
+    LOGICAL, INTENT(IN) :: near
+    TYPE(quad_data), INTENT(IN) :: qd
+
+    COMPLEX (KIND=dp), DIMENSION(3) :: res
+    INTEGER :: t, nweights
+    REAL (KIND=dp) :: An
+    REAL (KIND=dp), DIMENSION(3,qd%num_nodes) :: qpn
+    !REAL (KIND=dp) :: divfn
+    COMPLEX (KIND=dp), DIMENSION(qd%num_nodes) :: gv
+    COMPLEX (KIND=dp) :: auxint
+
+    nweights = qd%num_nodes
+
+    An = mesh%faces(faceind)%area
+    qpn = quad_tri_points(qd, faceind, mesh)
+
+    IF(ga%id/=gid_identity) THEN
+       DO t=1,nweights
+          qpn(:,t) = MATMUL(ga%j, qpn(:,t))
+       END DO
+    END IF
+
+    CALL vGs1(r, qpn, k, nweights, gv)
+    auxint = SUM(qd%weights*gv)*An
+
+    ! The singularity is cancelled out in the combined kernel Gs,
+    ! which is only used for Mueller formulation.
+    res(1) = auxint*rwgDiv(faceind,1,mesh)
+    res(2) = auxint*rwgDiv(faceind,2,mesh)
+    res(3) = auxint*rwgDiv(faceind,3,mesh)
+  END FUNCTION intK1Mueller
 END MODULE srcint

@@ -51,6 +51,7 @@ MODULE common
      ! Eigenvectors of a spectral problem. First dimension denotes basis coefficients.
      ! Second dimension denotes eigenvalue index.
      COMPLEX (KIND=dp), DIMENSION(:,:), ALLOCATABLE :: eigvec
+     COMPLEX (KIND=dp), DIMENSION(:,:), ALLOCATABLE :: adjeigvec
 
      ! Eigenvalues of a spectral problem.
      COMPLEX (KIND=dp), DIMENSION(:), ALLOCATABLE :: eigval

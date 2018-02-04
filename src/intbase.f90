@@ -1,11 +1,11 @@
-! MODULE: int
+! MODULE: intbase
 ! AUTHOR: Jouni Makitalo
 ! DESCRIPTION:
 ! Low-level routines for computing various singular integrals over
 ! line segments and triangle faces. The integrands consist of product of RWG
 ! function and kernel of the type R^m, where m may be negative integer.
 ! Based on article Hanninen 2006 Progress in Electromagnetic Research.
-MODULE int
+MODULE intbase
   USE mesh
   USE linalg
 
@@ -404,4 +404,4 @@ CONTAINS
 
     res = -sign*L/(2.0_dp*A)*crossr((r-p), intK3m1(r, faceind, edgeind, mesh))
   END FUNCTION intK4m1
-END MODULE int
+END MODULE intbase

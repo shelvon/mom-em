@@ -78,11 +78,12 @@ interface.f90
 mesh.f90
 nlsurf.f90
 solver.f90
+modes.f90
 strat.f90
 vie.f90
 bc.f90
 cs.f90
-int.f90
+intbase.f90
 nfields.f90
 pec.f90
 solver_vie.f90

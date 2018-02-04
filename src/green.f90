@@ -39,9 +39,9 @@ CONTAINS
 
   SUBROUTINE vGs(r0, rp, k, N, res)
     REAL (KIND=dp), DIMENSION(3), INTENT(IN) :: r0
+    INTEGER, INTENT(IN) :: N
     REAL (KIND=dp), DIMENSION(3,N), INTENT(IN) :: rp
     COMPLEX (KIND=dp), INTENT(IN) :: k
-    INTEGER, INTENT(IN) :: N
     COMPLEX (KIND=dp), DIMENSION(N), INTENT(INOUT) :: res
 
     ! Store distances temporarily to result.
@@ -178,8 +178,8 @@ CONTAINS
 
   SUBROUTINE vGs1(r0, rp, k, N, res)
     REAL (KIND=dp), DIMENSION(3), INTENT(IN) :: r0
-    REAL (KIND=dp), DIMENSION(3,N), INTENT(IN) :: rp
     INTEGER, INTENT(IN) :: N
+    REAL (KIND=dp), DIMENSION(3,N), INTENT(IN) :: rp
     COMPLEX (KIND=dp), INTENT(IN) :: k
     COMPLEX (KIND=dp), DIMENSION(N), INTENT(INOUT) :: res
 
