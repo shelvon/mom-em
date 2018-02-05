@@ -15,6 +15,7 @@ CONTAINS
   ! as specified in input structure b.
   SUBROUTINE modes_mueller(b)
     TYPE(batch), INTENT(INOUT) :: b
+
     ! INTEGER, INTENT(IN) :: type
     INTEGER :: n, m, l, k, nbasis, nf, nind, neig
     REAL (KIND=dp) :: wl, omega
@@ -24,7 +25,7 @@ CONTAINS
     INTEGER, DIMENSION(:), ALLOCATABLE :: eigind
 
     COMPLEX (KIND=dp) :: ri, eta
-    COMPLEX (KIND=dp), DIMENSION(:), ALLOCATABLE :: epsp
+    ! COMPLEX (KIND=dp), DIMENSION(:), ALLOCATABLE :: epsp
     INTEGER, DIMENSION(b%mesh%nedges) :: ind
     TYPE(medium_prop) :: mprop
 
@@ -57,10 +58,10 @@ CONTAINS
     nbasis = b%mesh%nedges
     neig = nbasis*2
 
-    ALLOCATE(A(nbasis*2,nbasis*2), Aadj(nbasis*2,nbasis*2),&
-            F(nbasis,nbasis), invF(nbasis,nbasis))
-    ALLOCATE(eigval(nbasis*2), eigind(neig), eigvec(nbasis*2,nbasis*2))
-    ALLOCATE(eigdata(neig,b%nwl))
+    ALLOCATE(A(1:nbasis*2,1:nbasis*2), Aadj(1:nbasis*2,1:nbasis*2),&
+            F(1:nbasis,1:nbasis), invF(1:nbasis,1:nbasis))
+    ALLOCATE(eigval(1:nbasis*2), eigind(1:neig), eigvec(1:nbasis*2,1:nbasis*2))
+    ALLOCATE(eigdata(1:b%nwl,1:neig))
 
     WRITE(*,*) 'Name: ', TRIM(b%name)
     WRITE(*,*) 'Preparing to solve the eigenmodes (Mueller)'
@@ -71,8 +72,22 @@ CONTAINS
     CALL rwg_moments(b%mesh, b%qd_tri, F)
     CALL matrix_inverse(F, invF)
 
-    DO n=1, b%nwl
+    ! DO n=b%nwl,1,-1
+    DO n=1,b%nwl
        wl = b%sols(n)%wl
+
+       ! initialize in each loop
+       A(:,:) = CMPLX(0.0_dp, 0.0_dp)
+       eigval(:) = CMPLX(0.0_dp, 0.0_dp)
+       eigvec(:,:) = CMPLX(0.0_dp, 0.0_dp)
+
+       ! Allocate memory for eigenvectors, group representation is not used
+       ALLOCATE(b%sols(n)%eigval(1:neig))
+       ALLOCATE(b%sols(n)%eigvec(1:nbasis*2,1:neig))
+       ALLOCATE(b%sols(n)%x(1:nbasis*2,1,1:neig))
+       b%sols(n)%eigval(1:neig) = CMPLX(0.0_dp, 0.0_dp)
+       b%sols(n)%eigvec(1:nbasis*2,1:neig) = CMPLX(0.0_dp, 0.0_dp)
+       b%sols(n)%x(1:nbasis*2,1,1:neig) = CMPLX(0.0_dp, 0.0_dp)
 
        ! Print some information.
        WRITE(*,'(A,F6.1,A,I0,A,I0,A)') ' Wavelength: ', wl*1d9, ' nm (', n, ' of ', b%nwl, ')'
@@ -127,11 +142,6 @@ CONTAINS
        CALL timer_start()
        CALL cpu_timer_start()
 
-       ! Allocate memory for eigenvectors, group representation is not used
-       ALLOCATE(b%sols(n)%eigval(neig))
-       ALLOCATE(b%sols(n)%eigvec(nbasis*2,neig))
-       ALLOCATE(b%sols(n)%x(nbasis*2,1,neig))
-
        ! Solve the eigenvalue problem of matrix A.
        ! No group representation.
        A(1:nbasis,1:nbasis) = A(1:nbasis,1:nbasis) + F
@@ -141,18 +151,18 @@ CONTAINS
        ! eigind = find_smallest(CMPLX((0.0_dp, AIMAG(eigval)), KIND=dp), nbasis*2, neig)
        ! eigind = find_smallest(CMPLX(REAL(eigval, KIND=dp), KIND=dp), nbasis*2, neig)
        ! eigind = find_smallest(eigval, nbasis*2, neig)
-       eigind = find_eigind(eigval, nbasis*2, neig)
-       b%sols(n)%eigval(:)=eigval(eigind(:))
-       b%sols(n)%eigvec(:,:)=eigvec(:,eigind(:))
+       eigind(1:neig) = find_eigind(eigval, nbasis*2, neig)
+       b%sols(n)%eigval(1:neig)=eigval(eigind(1:neig))
+       b%sols(n)%eigvec(1:nbasis*2,1:neig)=eigvec(1:nbasis*2,eigind(1:neig))
        ! b%sols(n)%x(:,1,:)=eigvec(:,eigind(:))
        ! b%sols(n)%x(1:nbasis,1,:)=eigvec(1:nbasis,eigind(:))/eta
-       b%sols(n)%x(1:nbasis,1,:)=eigvec(1:nbasis,eigind(:))
-       b%sols(n)%x(nbasis+1:2*nbasis,1,:)=eigvec(nbasis+1:2*nbasis,eigind(:))
-       eigdata(:,n) = eigval(eigind(:))
+       b%sols(n)%x(1:nbasis,1,1:neig)=eigvec(1:nbasis,eigind(1:neig))
+       b%sols(n)%x(nbasis+1:2*nbasis,1,1:neig)=eigvec(nbasis+1:2*nbasis,eigind(1:neig))
+       eigdata(n,1:neig) = eigval(eigind(1:neig))
 
        ! Normalize modes to <fn,fn> = 1.
        DO k=1,nbasis*2
-          CALL normalize_eigvec(b%sols(n)%eigvec(:,k), F, nbasis)
+          CALL normalize_eigvec(b%sols(n)%eigvec(1:nbasis*2,k), F, nbasis)
        END DO
 
        WRITE(*,*) 'Wall-clock time:'
@@ -160,17 +170,17 @@ CONTAINS
        WRITE(*,*) 'CPU time:'
        WRITE(*,*) sec_to_str(cpu_timer_end())
 
+       ! incrementally write result in each loop
+       CALL write_data(TRIM(b%name) // '-real_eig.txt', REAL(eigdata))
+       CALL write_data(TRIM(b%name) // '-imag_eig.txt', AIMAG(eigdata))
     END DO
     WRITE(*,*) '--- End wavelength batch ---'
-
-    CALL write_data(TRIM(b%name) // '-real_eig.txt', REAL(eigdata))
-    CALL write_data(TRIM(b%name) // '-imag_eig.txt', AIMAG(eigdata))
 
     DEALLOCATE(A, Aadj, F, invF, eigval, eigvec)
   END SUBROUTINE modes_mueller
 
   FUNCTION find_eigind(eigval, eigdim, neig) RESULT(ind)
-    COMPLEX (KIND=dp), DIMENSION(:), INTENT(IN) :: eigval
+    COMPLEX (KIND=dp), DIMENSION(1:neig), INTENT(IN) :: eigval
     INTEGER, INTENT(IN) :: eigdim, neig
 
     INTEGER, DIMENSION(neig) :: ind

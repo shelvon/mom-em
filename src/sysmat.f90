@@ -276,24 +276,25 @@ CONTAINS
     mu1 = mu0
     mu2 = mu0
     mesh = b%mesh
+    ! mesh = b%domains(1)%mesh
 
-    !$OMP PARALLEL DEFAULT(SHARED)
-
-    !$OMP SECTIONS
-    !$OMP SECTION
+!    !$OMP PARALLEL DEFAULT(SHARED)
+!
+!    !$OMP SECTIONS
+!    !$OMP SECTION
     CALL computenxD(omega, ri1, mesh, b%ga(1), prd, b%qd_tri, nxD1)
-    !$OMP SECTION
+!    !$OMP SECTION
     CALL computenxD(omega, ri2, mesh, b%ga(1), prd, b%qd_tri, nxD2)
-    !$OMP SECTION
+!    !$OMP SECTION
     CALL computenxHline(omega, ri1, mesh, b%ga(1), prd, b%qd_tri, nxHline1)
-    !$OMP SECTION
+!    !$OMP SECTION
     CALL computenxHline(omega, ri2, mesh, b%ga(1), prd, b%qd_tri, nxHline2)
-    !$OMP SECTION
+!    !$OMP SECTION
     CALL computenxK(omega, ri1, mesh, b%ga(1), prd, b%qd_tri, nxK1)
-    !$OMP SECTION
+!    !$OMP SECTION
     CALL computenxK(omega, ri2, mesh, b%ga(1), prd, b%qd_tri, nxK2)
-    !$OMP END SECTIONS
-
+!    !$OMP END SECTIONS
+!
 !    !$OMP END PARALLEL
 
 !    !$OMP SECTIONS
@@ -616,7 +617,7 @@ CONTAINS
     TYPE(prdnfo), POINTER, INTENT(IN) :: prd
     TYPE(quad_data), INTENT(IN) :: qd
     ! Input and output variables
-    COMPLEX (KIND=dp), DIMENSION(:,:), INTENT(INOUT) :: nxD
+    COMPLEX (KIND=dp), DIMENSION(1:mesh%nedges,1:mesh%nedges), INTENT(INOUT) :: nxD
 
     ! Internal variables
     COMPLEX (KIND=dp) :: k, eps, mu, coeff, intnxD
@@ -626,12 +627,13 @@ CONTAINS
     REAL (KIND=dp), DIMENSION(3) :: nor, diff
     LOGICAL :: near
     REAL (KIND=dp), DIMENSION(3,qd%num_nodes,3) :: fmv
-    COMPLEX (KIND=dp), DIMENSION(3,3,qd%num_nodes) :: intnxDaux
+    COMPLEX (KIND=dp), DIMENSION(3,3,qd%num_nodes,mesh%nfaces) :: intnxDaux
 
     WRITE(*,*) 'Building the nxD-matrix for eigen mode solver'
 
     nweights = qd%num_nodes
 
+    nxD(:,:) = CMPLX(0.0_dp,0.0_dp)
     k = ri*omega/c0
     eps = (ri**2)*eps0
     mu = mu0
@@ -648,22 +650,22 @@ CONTAINS
           CALL vrwg(qpm,m,p,mesh,fmv(:,:,p))
        END DO
 
-!       !$OMP PARALLEL DEFAULT(NONE)&
-!       !$OMP SHARED(nweights,intnxDaux,qpm,mesh,k,ga,prd,m,qd)&
-!       !$OMP PRIVATE(n,near,r)
-!       !$OMP DO SCHEDULE(STATIC)
+       !$OMP PARALLEL DEFAULT(NONE)&
+       !$OMP SHARED(nweights,intnxDaux,qpm,mesh,k,ga,prd,m,qd)&
+       !$OMP PRIVATE(n,near,r)
+       !$OMP DO SCHEDULE(STATIC)
        DO n=1,mesh%nfaces
           near = near_faces(mesh, prd, n, m, ga)
 
           DO r=1,nweights
              ! intnxDaux = int_Sn' dS' J_g*fn(r')*O'_gG(r,r')
-             intnxDaux(:,:,r) = intK2(qpm(:,r), n, mesh, k, ga, prd, near, qd)
+             intnxDaux(:,:,r,n) = intK2(qpm(:,r), n, mesh, k, ga, prd, near, qd)
           END DO
-!       END DO
-!       !$OMP END DO
-!       !$OMP END PARALLEL
-!
-!       DO n=1,mesh%nfaces
+       END DO
+       !$OMP END DO
+       !$OMP END PARALLEL
+
+       DO n=1,mesh%nfaces
           DO q=1,3
              DO p=1,3
 
@@ -671,7 +673,7 @@ CONTAINS
                 DO r=1,nweights
                    ! int_Sm dS fm(r).n(r) x intnxDaux.
                    intnxD = intnxD + qd%weights(r)*&
-                   dotc(CMPLX(fmv(:,r,p),KIND=dp), crossc(CMPLX(nor,KIND=dp), intnxDaux(:,q,r)))
+                   dotc(CMPLX(fmv(:,r,p),KIND=dp), crossc(CMPLX(nor,KIND=dp), intnxDaux(:,q,r,n)))
                 END DO!r
                 intnxD = intnxD*Am
 
@@ -702,7 +704,7 @@ CONTAINS
     TYPE(prdnfo), POINTER, INTENT(IN) :: prd
     TYPE(quad_data), INTENT(IN) :: qd
     ! Input and output variables
-    COMPLEX (KIND=dp), DIMENSION(:,:), INTENT(INOUT) :: nxHline
+    COMPLEX (KIND=dp), DIMENSION(1:mesh%nedges,1:mesh%nedges), INTENT(INOUT) :: nxHline
 
     ! Internal variables
     INTEGER, PARAMETER :: nweights = 6
@@ -717,7 +719,7 @@ CONTAINS
     REAL (KIND=dp), DIMENSION(3,nweights*3) :: ptv
     REAL (KIND=dp), DIMENSION(nweights) :: glp, glw
     REAL (KIND=dp), DIMENSION(3,nweights*3,3) :: fmv
-    COMPLEX (KIND=dp), DIMENSION(3,nweights*3) :: intnxHaux
+    COMPLEX (KIND=dp), DIMENSION(3,nweights*3,mesh%nfaces) :: intnxHaux
     COMPLEX (KIND=dp), DIMENSION(3) :: intnxH
 
     WRITE(*,*) 'Building the nxHline-matrix for eigen mode solver'
@@ -732,6 +734,7 @@ CONTAINS
          0.360761573048139_dp, 0.360761573048139_dp,&
          0.171324492379170_dp, 0.171324492379170_dp/)
 
+    nxHline(:,:) = CMPLX(0.0_dp,0.0_dp)
     k = ri*omega/c0
     eps = (ri**2)*eps0
     mu = mu0
@@ -772,7 +775,7 @@ CONTAINS
              DO r=1,nweights
                 ! intnxHaux = int_Sn' dS' div'_S(fn(r'))*O'_gG(r,r'), where the singularity
                 ! is cancelled out in the combined kernel of G(r,r') in Mueller formulation.
-                intnxHaux(:,r+nweights*(t-1)) = intK1Mueller(ptv(:,r+nweights*(t-1)), n, mesh, k, ga, prd, near, qd)
+                intnxHaux(:,r+nweights*(t-1),n) = intK1Mueller(ptv(:,r+nweights*(t-1)), n, mesh, k, ga, prd, near, qd)
              END DO
           END DO
 !       END DO
@@ -788,7 +791,7 @@ CONTAINS
                 DO r=1,nweights
                    ! Edges of the test triangle
                    DO p=1,3
-                      intnxH(p) = intnxH(p) + glw(r)*dotr(tv(:,t),fmv(:,r+nweights*(t-1),p))*intnxHaux(q,r+nweights*(t-1))
+                      intnxH(p) = intnxH(p) + glw(r)*dotr(tv(:,t),fmv(:,r+nweights*(t-1),p))*intnxHaux(q,r+nweights*(t-1),n)
                    END DO
                 END DO
              END DO
@@ -825,7 +828,7 @@ CONTAINS
     TYPE(prdnfo), POINTER, INTENT(IN) :: prd
     TYPE(quad_data), INTENT(IN) :: qd
     ! Input and output variables
-    COMPLEX (KIND=dp), DIMENSION(:,:), INTENT(INOUT) :: nxK
+    COMPLEX (KIND=dp), DIMENSION(1:mesh%nedges,1:mesh%nedges), INTENT(INOUT) :: nxK
 
     ! Internal variables
     COMPLEX (KIND=dp) :: k, eps, mu, coeff, intnxK
@@ -835,12 +838,13 @@ CONTAINS
     REAL (KIND=dp), DIMENSION(3) :: nor, diff
     LOGICAL :: near
     REAL (KIND=dp), DIMENSION(3,qd%num_nodes,3) :: fmv
-    COMPLEX (KIND=dp), DIMENSION(3,3,qd%num_nodes) :: intnxKaux
+    COMPLEX (KIND=dp), DIMENSION(3,3,qd%num_nodes,mesh%nfaces) :: intnxKaux
 
     WRITE(*,*) 'Building the nxK-matrix for eigen mode solver'
 
     nweights = qd%num_nodes
 
+    nxK(:,:) = CMPLX(0.0_dp,0.0_dp)
     k = ri*omega/c0
 
     DO m=1,mesh%nfaces
@@ -854,22 +858,22 @@ CONTAINS
           CALL vrwg(qpm,m,p,mesh,fmv(:,:,p))
        END DO
 
-!       !$OMP PARALLEL DEFAULT(NONE)&
-!       !$OMP SHARED(nweights,intnxKaux,qpm,mesh,k,ga,prd,m,qd)&
-!       !$OMP PRIVATE(n,near,r)
-!       !$OMP DO SCHEDULE(STATIC)
+       !$OMP PARALLEL DEFAULT(NONE)&
+       !$OMP SHARED(nweights,intnxKaux,qpm,mesh,k,ga,prd,m,qd)&
+       !$OMP PRIVATE(n,near,r)
+       !$OMP DO SCHEDULE(STATIC)
        DO n=1,mesh%nfaces
           near = near_faces(mesh, prd, n, m, ga)
 
           DO r=1,nweights
              ! intnxKaux = int_Sn' dS' [O'_g grad'G(r,r')]x(J_g*fn(r'))
-             intnxKaux(:,:,r) = intK4(qpm(:,r), n, mesh, k, ga, m, prd, near, qd)
+             intnxKaux(:,:,r,n) = intK4(qpm(:,r), n, mesh, k, ga, m, prd, near, qd)
           END DO
-!       END DO
-!       !$OMP END DO
-!       !$OMP END PARALLEL
-!
-!       DO n=1,mesh%nfaces
+       END DO
+       !$OMP END DO
+       !$OMP END PARALLEL
+
+       DO n=1,mesh%nfaces
           DO q=1,3
              DO p=1,3
 
@@ -877,7 +881,7 @@ CONTAINS
                 DO r=1,nweights
                    ! int_Sm dS fm(r).n(r) x intnxKaux.
                    intnxK = intnxK + qd%weights(r)*&
-                   dotc(CMPLX(fmv(:,r,p),KIND=dp), crossc(CMPLX(nor,KIND=dp), intnxKaux(:,q,r)))
+                   dotc(CMPLX(fmv(:,r,p),KIND=dp), crossc(CMPLX(nor,KIND=dp), intnxKaux(:,q,r,n)))
                 END DO!r
                 intnxK = intnxK*Am
 

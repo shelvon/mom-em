@@ -5,8 +5,9 @@ formatSpec = '%f%[^\n\r]';
 
 %
 % modelPrefix='../examples/nanodisk/nd'
-modelPrefix='../examples/sphere/sphere'
+% modelPrefix='../examples/sphere/sphere'
 % modelPrefix='../examples/cube/cube'
+modelPrefix='../examples/sphere/sphere'
 
 fileName=[modelPrefix,'-real_eig.txt'];
 fileID = fopen(fileName,'r');
@@ -23,7 +24,7 @@ fclose(fileID);
 eig_imag = [dataArray{1:end-1}].';
 
 %%
-neig=1:33;
+neig=1:65;
 % plot(eig_real([1:neig]),eig_imag([1:neig]),'*');
 plot3(eig_real(neig),eig_imag(neig),neig,'-*');grid on;grid minor;
 % plot(eig_real,eig_imag,'*');
