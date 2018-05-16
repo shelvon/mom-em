@@ -78,6 +78,7 @@ CONTAINS
 
        ! initialize in each loop
        A(:,:) = CMPLX(0.0_dp, 0.0_dp)
+       Aadj(:,:) = CMPLX(0.0_dp, 0.0_dp)
        eigval(:) = CMPLX(0.0_dp, 0.0_dp)
        eigvec(:,:) = CMPLX(0.0_dp, 0.0_dp)
 
@@ -108,7 +109,7 @@ CONTAINS
        CALL cpu_timer_start()
        CALL sysmat_mueller(b, n, A, b%mesh%nedges)
 
-       ! Compute the adjoint.
+!       ! Compute the adjoint.
 !       Aadj = A
 !       Aadj = TRANSPOSE(CONJG(Aadj))
 !       CALL matmul_blockrt(Aadj, F, nbasis)
@@ -119,16 +120,15 @@ CONTAINS
 
        ! Eigenvalue problem for Fredholm operator I + A.
        ! Add the identity part.
-       ! IF(type==muller_fredholm) THEN
-          DO m=1,(nbasis*2)
-             A(m,m) = A(m,m) + 1.0_dp
-
+!       IF(type==muller_fredholm) THEN
+         DO m=1,(nbasis*2)
+            A(m,m) = A(m,m) + 1.0_dp
              ! Aadj(m,m) = Aadj(m,m) + 1.0_dp
           END DO
-          ! SVD for compact operator A.
-       ! ELSE IF(type==muller_svd) THEN
-       !   A = MATMUL(A, Aadj)
-       ! END IF
+       ! SVD for compact operator A.
+!       ELSE IF(type==muller_svd) THEN
+!         A = MATMUL(A, Aadj)
+!       END IF
 
        WRITE(*,*) 'Wall-clock time:'
        WRITE(*,*) sec_to_str(timer_end())

@@ -257,10 +257,9 @@ CONTAINS
              ! coefficients to the surface polarization in RWG basis.
              DO nf=1,nga
                 DO l=1,nsrc
-                   CALL nlsurf_coef(b%domains(m)%mesh, b%mesh%nedges, omega, mprop%ri, mprop%shri,&
-                        epsp(1:b%domains(m)%mesh%nfaces), b%sols(n)%x(:,:,l), b%ga, nf, mprop%nls,&
-                        b%qd_tri, phdx, phdy, b%sols(n)%src_coef(1:(2*nind),m,nf,l),&
-                        src_vec(1:(2*nind)))
+                   CALL nlsurf_coef(b%domains(m)%mesh, b%mesh%nedges, omega, mprop%ri, mprop%shri, &
+                        epsp(1:b%domains(m)%mesh%nfaces), b%sols(n)%x(:,:,l), b%ga, nf, mprop%nls, &
+                        b%qd_tri, phdx, phdy, b%sols(n)%src_coef(1:(2*nind),m,nf,l), src_vec(1:(2*nind)))
 
                    !CALL nlsurf_srcvec(b%domains(m)%mesh, b%mesh%nedges, omega, mprop%ri, mprop%shri,&
                    !     epsp(1:b%domains(m)%mesh%nfaces), b%sols(n)%x(:,:,l), b%ga, nf, mprop%nls,&

@@ -15,6 +15,8 @@ MODULE nlsurf
      COMPLEX (KIND=dp) :: chi2_nnn
      COMPLEX (KIND=dp) :: chi2_ntt
      COMPLEX (KIND=dp) :: chi2_ttn
+     INTEGER :: nsurf_ids
+     INTEGER, DIMENSION(:), ALLOCATABLE :: surf_ids
   END TYPE medium_nls
 
 CONTAINS
@@ -134,8 +136,8 @@ CONTAINS
   ! src_vec = (E0, H0)
   ! E0_n = -<div'f_m,Pn>/(2*epsp)
   ! H0_n = i*Omega*<f_m,Pt x n>/2
-  SUBROUTINE nlsurf_coef(mesh, nedgestot, omegaff, riff, rish, epsp, xff, ga,&
-       nf, nls, qd, phdx, phdy, src_coef, src_vec)
+  SUBROUTINE nlsurf_coef(mesh, nedgestot, omegaff, riff, rish, &
+       epsp, xff, ga, nf, nls, qd, phdx, phdy, src_coef, src_vec)
     TYPE(mesh_container), INTENT(IN) :: mesh
     INTEGER, INTENT(IN) :: nedgestot, nf
     REAL (KIND=dp), INTENT(IN) :: omegaff
@@ -152,6 +154,7 @@ CONTAINS
     COMPLEX (KIND=dp), DIMENSION(:,:), ALLOCATABLE :: F
     INTEGER :: INFO, m, r, q, index, nweights, nbasis, m2, t, dim
 
+    INTEGER :: medium_index
     COMPLEX (KIND=dp) :: int1, int2, int3
     REAL (KIND=dp) :: A, fmDiv
     COMPLEX (KIND=dp), DIMENSION(3,qd%num_nodes) :: Pnls_tan
@@ -182,6 +185,10 @@ CONTAINS
        qp = quad_tri_points(qd, m, mesh)
        A = mesh%faces(m)%area
        nor = mesh%faces(m)%n
+
+       IF ( (nls%nsurf_ids .GT. 0) .AND. (ALL((nls%surf_ids - mesh%faces(m)%id) .NE. 0)) ) THEN
+          CYCLE
+       END IF
 
        DO r=1,nweights
           Pnls = Pnls_frag(mesh, nedgestot, omegaff, riff, xff, ga, m, nf, nls, qp(:,r))
@@ -528,6 +535,7 @@ CONTAINS
     END DO
   END FUNCTION nls_contour3
 
+  ! not being used currently
   SUBROUTINE nlsurf_srcvec(mesh, nedgestot, omegaff, riff, rish, epsp, xff, ga,&
        nf, nls, qd, src_vec)
     TYPE(mesh_container), INTENT(IN) :: mesh

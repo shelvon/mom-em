@@ -146,8 +146,10 @@ CONTAINS
 
     DO WHILE(iovar==0)
        READ(fid,*) wl2, nr2, ni2
+       WRITE(*,*) wl2
 
-       IF(wl1<=wl .AND. wl<=wl2 .AND. wl1/=wl2) THEN
+       ! IF( (wl1<=wl) .AND. (wl<=wl2) .AND. (wl1/=wl2)) THEN
+       IF( (wl1<=wl) .AND. (wl<=wl2) .AND. (ABS(wl1-wl2)>=epsilon_dp) ) THEN
           t = (wl-wl1)/(wl2 - wl1)
           res = CMPLX(linterp(nr1, nr2, t), linterp(ni1, ni2, t))
           CLOSE(fid)

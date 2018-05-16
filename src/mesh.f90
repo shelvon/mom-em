@@ -10,8 +10,6 @@ MODULE mesh
 
   IMPLICIT NONE
 
-  INTRINSIC NINT
-
   INTEGER, PARAMETER :: meshver = 4
   INTEGER, PARAMETER :: mesh_bnd_none = 1,&
        mesh_bnd_xplane = 2,&

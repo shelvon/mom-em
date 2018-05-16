@@ -98,7 +98,7 @@ CONTAINS
     COMPLEX (KIND=dp)   :: Cprefix, prefixHG00, prefixLG0l
     REAL (KIND=dp)      :: x,y,z, rho, varphi
     INTEGER             :: ix, iy, iz, jExtra
-    COMPLEX (KIND=dp), DIMENSION(0:focal%jMax)      :: intJjS0C0, intJjS0C1, intJjS1C0, intJjS1C1
+    COMPLEX (KIND=dp), DIMENSION(0:focal%jMax)      :: intJjS0C0, intJjS0C1, intJjS1C0, intJjS1C1, intJjS2C0
     REAL (KIND=dp), DIMENSION(1:2,0:focal%jMax+2)   :: dj
     COMPLEX (KIND=dp), DIMENSION(-(focal%jMax+2):focal%jMax+2)    :: cj
     COMPLEX (KIND=dp), DIMENSION(-focal%jMax:focal%jMax,1:3)      :: Ej
@@ -152,7 +152,11 @@ CONTAINS
     ! get the complex coefficients of complex Fourier series expansion of the
     ! entire pupil function, but only for the one doesn't depend on radial variable.
     IF(pupil%aperture%type=='circ' .AND. &
-    (phase_type=='rect' .OR. phase_type=='vortex' .OR. phase_type=='petal')) THEN
+    (phase_type=='rect' &
+    .OR. phase_type=='vortex' &
+    .OR. phase_type=='petal'  &
+    .OR. phase_type=='bessel' &
+    .OR. phase_type=='petal_rect')) THEN
       IF(phase_type=='vortex') THEN
         cj = CMPLX(0.0_dp,0.0_dp)
         charge = pupil%phase%vortex%charge
@@ -162,6 +166,8 @@ CONTAINS
         l = pupil%phase%petal%l
         cj(l) = coeffPupil(pupil,l)
         cj(-l) = coeffPupil(pupil,-l)
+      ELSE IF(phase_type=='bessel') THEN
+        cj = CMPLX(1.0_dp,0.0_dp)
       ELSE
         DO j=-(focal%jMax+jExtra),focal%jMax+jExtra
           cj(j) = coeffPupil(pupil,j)
@@ -187,14 +193,15 @@ CONTAINS
           intJjS0C1 = CMPLX(0.0_dp,0.0_dp)
           intJjS1C0 = CMPLX(0.0_dp,0.0_dp)
           intJjS1C1 = CMPLX(0.0_dp,0.0_dp)
+          intJjS2C0 = CMPLX(0.0_dp,0.0_dp)
           Ej = CMPLX(0.0_dp,0.0_dp)
 
           ! parallel computation of series of integrals
           IF(focustype==focustype_x) THEN
 
-            IF(phase_type=='rect') THEN
+            IF(phase_type=='rect' .OR. phase_type=='petal_rect') THEN
               DO j=-focal%jMax,focal%jMax
-                IF(cj(j)==0 .OR. cj(j+2)==0 .OR. cj(j-2)==0 .OR. cj(j+1)==0 .OR. cj(j-1)==0) THEN
+                IF(cj(j)==0 .AND. cj(j+2)==0 .AND. cj(j-2)==0 .AND. cj(j+1)==0 .AND. cj(j-1)==0) THEN
                   CONTINUE
                 END IF
 
@@ -236,6 +243,20 @@ CONTAINS
               Ej(charge,3) = 2*(0,1)*&
                 (EXP((0,1)*(-1)*varphi)*intJjS1C0(charge-1)-&
                 EXP((0,1)*1*varphi)*intJjS1C0(charge+1))
+
+              prefixHG00 = cj(charge)*E0*pi*((0,1)**charge)*EXP((0,1)*charge*varphi)
+              Ej(charge,:) = prefixHG00*Ej(charge,:)
+
+            ! bessel beam
+            ELSE IF(phase_type=='bessel') THEN
+              ! temporarily consider only the o-order of Bessel beam, i.e. J_0
+              charge=0
+              theta_max = pupil%phase%bessel%theta
+
+              j=charge;s=2;c=0;     intJjS2C0(j)=IntegralJjSsCc(j,s,c,theta_max,k,rho,z)
+
+              ! calc. field
+              Ej(charge,3) = intJjS2C0(charge)
 
               prefixHG00 = cj(charge)*E0*pi*((0,1)**charge)*EXP((0,1)*charge*varphi)
               Ej(charge,:) = prefixHG00*Ej(charge,:)
@@ -286,9 +307,11 @@ CONTAINS
             focal%e(iy,ix,iz)%data(1) = Cprefix*SUM(Ej(:,1))
             focal%e(iy,ix,iz)%data(2) = Cprefix*SUM(Ej(:,2))
             focal%e(iy,ix,iz)%data(3) = Cprefix*SUM(Ej(:,3))
+
           END IF!(focustype==focustype_x) THEN
 
         END DO! iy=
+        WRITE(*,'(A,I0,A)') 'Computed ', NINT(100*REAL(ix)/REAL(focal%nx)), ' percent of sources'
       END DO! ix=
 
       ! write to file
@@ -310,6 +333,17 @@ CONTAINS
 !      CALL write_data(TRIM(filename) // '-ey-im.dat', AIMAG(RESHAPE(focal%e(:,:,iz)%data(2),(/focal%ny,focal%nx/)), KIND=dp))
 !      CALL write_data(TRIM(filename) // '-ez-im.dat', AIMAG(RESHAPE(focal%e(:,:,iz)%data(3),(/focal%ny,focal%nx/)), KIND=dp))
     END DO! iz=
+
+!      ! write to file
+!      iy = 1
+!      filename = name // filename
+!      CALL write_data(TRIM(filename) // '-ex-re.dat', REAL(focal%e(iy,:,:)%data(1)))
+!      CALL write_data(TRIM(filename) // '-ey-re.dat', REAL(focal%e(iy,:,:)%data(2)))
+!      CALL write_data(TRIM(filename) // '-ez-re.dat', REAL(focal%e(iy,:,:)%data(3)))
+!
+!      CALL write_data(TRIM(filename) // '-ex-im.dat', AIMAG(focal%e(iy,:,:)%data(1)))
+!      CALL write_data(TRIM(filename) // '-ey-im.dat', AIMAG(focal%e(iy,:,:)%data(2)))
+!      CALL write_data(TRIM(filename) // '-ez-im.dat', AIMAG(focal%e(iy,:,:)%data(3)))
 
     WRITE(*,*) 'focal field calculation is finished.'
 
@@ -339,7 +373,11 @@ CONTAINS
     maxerr = 1D-4
     maxDepth = 20
 
-    integ = asqz(integrandTheta, 0.0_dp, theta_max, maxerr, maxDepth)
+    IF(phase_type=='bessel') THEN
+      integ = integrandTheta(theta_max) ! Here borrow the variable name theta_max->theta
+    ELSE
+      integ = asqz(integrandTheta, 0.0_dp, theta_max, maxerr, maxDepth)
+    END IF
     END FUNCTION IntegralJjSsCc
 
     FUNCTION integrandTheta(theta) RESULT(res)
@@ -387,7 +425,7 @@ CONTAINS
       COMPLEX (KIND=dp) :: res
 
       ! Host Association: k, z, phase_type, l, w0
-      IF(phase_type=='petal') THEN
+      IF(phase_type=='petal' .OR. phase_type=='petal_rect') THEN
         res = ((SQRT(2.0_dp)*f0*SIN(theta)/w0)**ABS(l))*f_w(theta)*SQRT(COS(theta))*EXP((0,1)*k*z*COS(theta))
       ELSE
         res = f_w(theta)*SQRT(COS(theta))*EXP((0,1)*k*z*COS(theta))

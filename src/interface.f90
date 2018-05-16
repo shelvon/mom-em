@@ -259,7 +259,8 @@ CONTAINS
   SUBROUTINE read_smed(line, b)
     CHARACTER (LEN=*), INTENT(IN) :: line
     TYPE(batch), INTENT(INOUT) :: b
-    INTEGER :: mindex, n
+    INTEGER :: mindex, n, nsurf_ids
+    INTEGER, DIMENSION(:), ALLOCATABLE :: surf_ids
     CHARACTER (LEN=256) :: type, method, file, file2, file3
     COMPLEX (KIND=dp) :: val
     REAL (KIND=dp), DIMENSION(3,6) :: chi2
@@ -287,6 +288,9 @@ CONTAINS
           END DO
 
           WRITE(*,'(A,I0,A,A)') 'Set medium ', mindex, ' refractive index to ', TRIM(file)
+!       ELSE IF(method=='model') THEN
+!          READ(line,*) mindex, type, method, model_name
+
        ELSE IF(method=='value') THEN
           READ(line,*) mindex, type, method, val
 
@@ -312,10 +316,22 @@ CONTAINS
           READ(line,*) mindex, type, method, b%media(mindex)%prop(1)%nls%chi2_nnn,&
                b%media(mindex)%prop(1)%nls%chi2_ntt, b%media(mindex)%prop(1)%nls%chi2_ttn
 
+               b%media(mindex)%prop(1)%nls%nsurf_ids = -1! "-1" means all surfaces
           DO n=1,b%nwl
              b%media(mindex)%prop(n)%nls%chi2_nnn = b%media(mindex)%prop(1)%nls%chi2_nnn
              b%media(mindex)%prop(n)%nls%chi2_ntt = b%media(mindex)%prop(1)%nls%chi2_ntt
              b%media(mindex)%prop(n)%nls%chi2_ttn = b%media(mindex)%prop(1)%nls%chi2_ttn
+             b%media(mindex)%prop(n)%nls%nsurf_ids = -1! "-1" means all surfaces
+          END DO
+       ELSE IF(method=='ids') THEN
+          READ(line,*) mindex, type, method, nsurf_ids
+          ALLOCATE(surf_ids(1:nsurf_ids))
+
+          READ(line,*) mindex, type, method, nsurf_ids, surf_ids(1:nsurf_ids)
+          DO n=1,b%nwl
+             b%media(mindex)%prop(n)%nls%nsurf_ids = nsurf_ids
+             ALLOCATE(b%media(mindex)%prop(n)%nls%surf_ids(1:nsurf_ids))
+             b%media(mindex)%prop(n)%nls%surf_ids = surf_ids
           END DO
        ELSE
           WRITE(*,*) 'Unrecongnized method for retrieveing medium properties!'
@@ -674,6 +690,34 @@ CONTAINS
           READ(line,*)  pupil_type, aperture_name, pupil%aperture%circ%r,   &
                         pupil%phase%type, pupil%phase%petal%l
 
+          b%pupil=pupil
+        ELSE IF(phase_name=='bessel') THEN
+          READ(line,*)  pupil_type, aperture_name, pupil%aperture%circ%r,   &
+                        pupil%phase%type, pupil%phase%bessel%theta
+
+          b%pupil=pupil
+        ELSE IF(phase_name=='petal_rect') THEN
+          READ(line,*)  pupil_type, aperture_name, pupil%aperture%circ%r,   &
+                        pupil%phase%type, pupil%phase%petal_rect%l,         &
+                        pupil%phase%petal_rect%lj
+          ! currently only one petal is retained
+          pupil%phase%petal_rect%intervals_n = 1
+          ALLOCATE(pupil%phase%petal_rect%intervals(1:2,1))
+          pupil%phase%petal_rect%intervals(1:2,1) = 2.0*pi/7.0*&
+                        ( (/-1.0, 1.0/)/2.0 + (pupil%phase%petal_rect%lj-1) )
+          !test: keep 2.5 petal of petal7
+          pupil%phase%petal_rect%l = 7
+          pupil%phase%petal_rect%intervals(1:2,1) = 2.0*pi/7.0*&
+                        ((/-1.0, 1.0/)/4.0 + (2.75-1) )
+!          pupil%phase%petal_rect%intervals(1:2,1) = 2.0*pi/7.0*&
+!                        ((/-1.0, 1.0/)/2.0 + (2.75-1) )
+!          pupil%phase%petal_rect%intervals(1:2,1) = 2.0*pi/7.0*&
+!                        ((/-1.0, 1.0/)/4.0 + (2.5-1) )
+
+!          !test: keep 3 petal of petal8
+!          pupil%phase%petal_rect%l = 8
+!          pupil%phase%petal_rect%intervals(1:2,1) = 2.0*pi/8.0*&
+!                        ((/-1.0, 1.0/)/4.0 + (2.25-1) )
           b%pupil=pupil
         END IF
       ELSE IF(aperture_name=='ring') THEN
@@ -1889,7 +1933,7 @@ CONTAINS
        IF(stat<0 .OR. scmd=='exit') THEN
           EXIT
        ELSE IF(scmd=='#') THEN
-          WRITE(*,*) '# ',line(1+1:LEN_TRIM(line))
+          ! WRITE(*,*) '# ',line(1+1:LEN_TRIM(line))
           CYCLE
        ELSE IF(scmd=='name') THEN
           READ(line,*) b%name

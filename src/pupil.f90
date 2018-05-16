@@ -35,10 +35,23 @@ MODULE pupil
     ! aj for cos(j\phi) and bj for sin(j\phi)
   END TYPE data_rect
 
-  ! topological charge of vortex beam
+  ! topological charge of petal beam
   TYPE data_petal
     INTEGER :: l ! l is the integer subindex in Petal_{p,l} = LG_{p,l} + LG_{p,-l}
   END TYPE data_petal
+
+  ! petal beam + rect phase mask
+  TYPE data_petal_rect
+    INTEGER :: l ! l is the integer subindex in Petal_{p,l} = LG_{p,l} + LG_{p,-l}
+    INTEGER :: lj ! lj-petal is retained and the other petals are blocked
+    INTEGER                                     :: intervals_n
+    REAL (KIND=dp), DIMENSION(:,:), ALLOCATABLE :: intervals
+  END TYPE data_petal_rect
+
+  ! theta value: diverging angle of the axicon
+  TYPE data_bessel
+    REAL (KIND=dp)  :: theta ! the angle that goes into Bessel function J_j(k \rho \theta)
+  END TYPE data_bessel
 
   ! topological charge of vortex beam
   TYPE data_vortex
@@ -55,8 +68,10 @@ MODULE pupil
     ! type of pupil function: either analytical or numerical.
     CHARACTER (LEN=32)      :: type
     TYPE(data_rect)         :: rect
-    TYPE(data_vortex)       :: vortex !spiral phase plate
-    TYPE(data_petal)        :: petal  !petal beam phase term
+    TYPE(data_vortex)       :: vortex   !spiral phase plate
+    TYPE(data_petal)        :: petal    !petal beam phase term
+    TYPE(data_bessel)       :: bessel   !bessel beam
+    TYPE(data_petal_rect)   :: petal_rect   !petal beam phase + rect phase
   END TYPE data_phase
 
   TYPE data_pupil
@@ -200,12 +215,10 @@ CONTAINS
     COMPLEX (KIND=dp)               :: cj
 
     COMPLEX (KIND=dp)               :: prefix
-    INTEGER                         :: charge, l, id, intervals_n
+    INTEGER                         :: charge, l, lj, id, intervals_n
     REAL (KIND=dp), DIMENSION(1:2)  :: delta! amount of phase shift [\pi]
     REAL (KIND=dp), DIMENSION(1:2,pupil%phase%rect%intervals_n) :: intervals,intervalsLower
-
-    intervals_n = pupil%phase%rect%intervals_n
-    intervals = pi*pupil%phase%rect%intervals ! convert to unit in [\pi]
+    REAL (KIND=dp), DIMENSION(1:2,pupil%phase%petal_rect%intervals_n) :: intervalsPetal
 
     IF(pupil%phase%type=='vortex') THEN
       charge = pupil%phase%vortex%charge
@@ -221,7 +234,24 @@ CONTAINS
       ELSE
         cj = CMPLX(0.0_dp,0.0_dp)
       END IF
+    ELSE IF(pupil%phase%type=='petal_rect') THEN
+      l = pupil%phase%petal_rect%l
+      lj = pupil%phase%petal_rect%lj
+      intervals_n = pupil%phase%petal_rect%intervals_n
+      intervalsPetal = pupil%phase%petal_rect%intervals
+      IF(j==l) THEN
+        cj = (1.0_dp/(2*pi*2))*( ( intervalsPetal(2,1) - intervalsPetal(1,1) ) -&
+             ( EXP(-(0,1)*(l+j)*intervalsPetal(2,1)) - EXP(-(0,1)*(l+j)*intervalsPetal(1,1)) )/((0,1)*(l+j)) )
+      ELSE IF(j==-l) THEN
+        cj = (1.0_dp/(2*pi*2))*( ( intervalsPetal(2,1) - intervalsPetal(1,1) ) +&
+             ( EXP((0,1)*(l-j)*intervalsPetal(2,1)) - EXP((0,1)*(l-j)*intervalsPetal(1,1)) )/((0,1)*(l-j)) )
+      ELSE
+        cj = (1.0_dp/(2*pi*2))*( -( EXP(-(0,1)*(l+j)*intervalsPetal(2,1)) - EXP(-(0,1)*(l+j)*intervalsPetal(1,1)) )/((0,1)*(l+j)) &
+           + ( EXP((0,1)*(l-j)*intervalsPetal(2,1)) - EXP((0,1)*(l-j)*intervalsPetal(1,1)) )/((0,1)*(l-j)) )
+      END IF
     ELSE IF(pupil%phase%type=='rect') THEN
+      intervals_n = pupil%phase%rect%intervals_n
+      intervals = pi*pupil%phase%rect%intervals ! convert to unit in [\pi]
       delta = pi*pupil%phase%rect%delta ! convert to unit in [\pi]
 
       ! phase modulation higher level
@@ -243,6 +273,7 @@ CONTAINS
       END IF
     END IF
 
+    ! remove insignificant orders
     IF(REAL(cj) .LT. tol) THEN
       cj = CMPLX(0.0_dp,AIMAG(cj))
     END IF
