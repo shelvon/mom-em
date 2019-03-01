@@ -18,7 +18,7 @@ CONTAINS
     TYPE(mesh_container), INTENT(IN) :: mesh
     REAL (KIND=dp) :: res
     REAL (KIND=dp) :: Rp, Rm, sp, sm, div1, div2
-    REAL (KIND=dp), DIMENSION(3) :: p1, p2, s
+    REAL (KIND=dp), DIMENSION(3) :: p1, p2, s, rp2, rp1
 
     IF(edgeind==1) THEN
        p1 = mesh%nodes(mesh%faces(faceind)%node_indices(1))%p
@@ -37,10 +37,12 @@ CONTAINS
        STOP
     END IF
 
-    Rp = normr(r-p2)
-    Rm = normr(r-p1)
-    sp = dotr((p2-r), s)
-    sm = dotr((p1-r), s)
+    rp2 = r-p2
+    rp1 = r-p1
+    Rp = normr(rp2)
+    Rm = normr(rp1)
+    sp = dotr((-rp2), s)
+    sm = dotr((-rp1), s)
 
     div1 = Rp-sp
     div2 = Rm+sm
@@ -58,7 +60,7 @@ CONTAINS
     TYPE(mesh_container), INTENT(IN) :: mesh
     REAL (KIND=dp) :: res
     REAL (KIND=dp) :: Rp, Rm, sp, sm, h, t, R02
-    REAL (KIND=dp), DIMENSION(3) :: p, p1, p2, s
+    REAL (KIND=dp), DIMENSION(3) :: p, p1, p2, s, rp2, rp1, rp0
 
     IF(edgeind==1) THEN
        p1 = mesh%nodes(mesh%faces(faceind)%node_indices(1))%p
@@ -76,17 +78,20 @@ CONTAINS
        WRITE(*,*) 'Error evaluating intL1!'
        STOP
     END IF
-
-    h = dotr(mesh%faces(faceind)%n, r-p)
-    t = dotr(mesh%faces(faceind)%m(:,edgeind), r-p)
+    
+    rp0 = r-p
+    h = dotr(mesh%faces(faceind)%n, rp0)
+    t = dotr(mesh%faces(faceind)%m(:,edgeind), rp0)
     R02 = (t**2) + (h**2)
 
     s = mesh%faces(faceind)%s(:,edgeind)
 
-    Rp = normr(r-p2)
-    Rm = normr(r-p1)
-    sp = dotr((p2-r), s)
-    sm = dotr((p1-r), s)
+    rp2 = r-p2
+    rp1 = r-p1
+    Rp = normr(rp2)
+    Rm = normr(rp1)
+    sp = dotr((-rp2), s)
+    sm = dotr((-rp1), s)
 
     IF(R02==0) THEN
        res = 0.5_dp*(sp*Rp - sm*Rm)
@@ -101,7 +106,7 @@ CONTAINS
     TYPE(mesh_container), INTENT(IN) :: mesh
     REAL (KIND=dp) :: res
     REAL (KIND=dp) :: Rp, Rm, sp, sm, h, t, R02
-    REAL (KIND=dp), DIMENSION(3) :: p, p1, p2, s
+    REAL (KIND=dp), DIMENSION(3) :: p, p1, p2, s, rp2, rp1, rp0
 
     IF(edgeind==1) THEN
        p1 = mesh%nodes(mesh%faces(faceind)%node_indices(1))%p
@@ -120,16 +125,19 @@ CONTAINS
        STOP
     END IF
 
-    h = dotr(mesh%faces(faceind)%n, r-p)
-    t = dotr(mesh%faces(faceind)%m(:,edgeind), r-p)
+    rp0 = r-p
+    h = dotr(mesh%faces(faceind)%n, rp0)
+    t = dotr(mesh%faces(faceind)%m(:,edgeind), rp0)
     R02 = (t**2) + (h**2)
 
     s = mesh%faces(faceind)%s(:,edgeind)
 
-    Rp = normr(r-p2)
-    Rm = normr(r-p1)
-    sp = dotr((p2-r), s)
-    sm = dotr((p1-r), s)
+    rp2 = r-p2
+    rp1 = r-p1
+    Rp = normr(rp2)
+    Rm = normr(rp1)
+    sp = dotr((-rp2), s)
+    sm = dotr((-rp1), s)
 
     res = 0.75_dp*R02*intL1(r, faceind, edgeind, mesh) + 0.25_dp*(sp*(Rp**3) - sm*(Rm**3))
   END FUNCTION intL3
@@ -139,22 +147,25 @@ CONTAINS
     INTEGER, INTENT(IN) :: faceind
     TYPE(mesh_container), INTENT(IN) :: mesh
     REAL (KIND=dp) :: res, x, y, omega
-    REAL (KIND=dp), DIMENSION(3) :: p1, p2, p3, a1, a2, a3
+    REAL (KIND=dp), DIMENSION(3) :: p1, p2, p3, a1, a2, a3, p1r, p2r, p3r
 
     p1 = mesh%nodes(mesh%faces(faceind)%node_indices(1))%p
     p2 = mesh%nodes(mesh%faces(faceind)%node_indices(2))%p
     p3 = mesh%nodes(mesh%faces(faceind)%node_indices(3))%p
-
-    a1 = (p1-r)/normr(p1-r)
-    a2 = (p2-r)/normr(p2-r)
-    a3 = (p3-r)/normr(p3-r)
+    
+    p1r = p1-r
+    p2r = p2-r
+    p3r = p3-r
+    a1 = (p1r)/normr(p1r)
+    a2 = (p2r)/normr(p2r)
+    a3 = (p3r)/normr(p3r)
 
     x = 1.0_dp + dotr(a1,a2) + dotr(a1,a3) + dotr(a2,a3)
     y = ABS(dotr(a1, crossr(a2,a3)))
 
     omega = 2.0_dp*ATAN2(y,x)
 
-    IF(dotr(mesh%faces(faceind)%n, r-p1)>0.0_dp) THEN
+    IF(dotr(mesh%faces(faceind)%n, -p1r)>0.0_dp) THEN
        res = ABS(omega)
     ELSE
        res = -ABS(omega)
@@ -166,10 +177,11 @@ CONTAINS
     INTEGER, INTENT(IN) :: faceind
     TYPE(mesh_container), INTENT(IN) :: mesh
     REAL (KIND=dp) :: res, h
-    REAL (KIND=dp), DIMENSION(3) :: p1
+    REAL (KIND=dp), DIMENSION(3) :: p1, rp1
 
     p1 = mesh%nodes(mesh%faces(faceind)%node_indices(1))%p
-    h = dotr(mesh%faces(faceind)%n, r-p1)
+    rp1 = r-p1
+    h = dotr(mesh%faces(faceind)%n, rp1)
 
     IF(h==0) THEN
        res = 0
@@ -183,17 +195,20 @@ CONTAINS
     INTEGER, INTENT(IN) :: faceind
     TYPE(mesh_container), INTENT(IN) :: mesh
     REAL (KIND=dp) :: res, h, t1, t2, t3
-    REAL (KIND=dp), DIMENSION(3) :: p1, p2, p3
+    REAL (KIND=dp), DIMENSION(3) :: p1, p2, p3, rp1, rp2, rp3
     REAL (KIND=dp) :: edgeint1, edgeint2, edgeint3
 
     p1 = mesh%nodes(mesh%faces(faceind)%node_indices(1))%p
     p2 = mesh%nodes(mesh%faces(faceind)%node_indices(2))%p
     p3 = mesh%nodes(mesh%faces(faceind)%node_indices(3))%p
-    t1 = dotr(mesh%faces(faceind)%m(:,1), r-p1)
-    t2 = dotr(mesh%faces(faceind)%m(:,2), r-p2)
-    t3 = dotr(mesh%faces(faceind)%m(:,3), r-p3)
+    rp1 = r-p1
+    rp2 = r-p2
+    rp3 = r-p3
+    t1 = dotr(mesh%faces(faceind)%m(:,1), rp1)
+    t2 = dotr(mesh%faces(faceind)%m(:,2), rp2)
+    t3 = dotr(mesh%faces(faceind)%m(:,3), rp3)
 
-    h = dotr(mesh%faces(faceind)%n, r-p1)
+    h = dotr(mesh%faces(faceind)%n, rp1)
 
     IF(h==0) THEN
        IF(t1==0) THEN
@@ -230,16 +245,19 @@ CONTAINS
     INTEGER, INTENT(IN) :: faceind
     TYPE(mesh_container), INTENT(IN) :: mesh
     REAL (KIND=dp) :: res, h, t1, t2, t3
-    REAL (KIND=dp), DIMENSION(3) :: p1, p2, p3
+    REAL (KIND=dp), DIMENSION(3) :: p1, p2, p3, rp1, rp2, rp3
 
     p1 = mesh%nodes(mesh%faces(faceind)%node_indices(1))%p
     p2 = mesh%nodes(mesh%faces(faceind)%node_indices(2))%p
     p3 = mesh%nodes(mesh%faces(faceind)%node_indices(3))%p
-    t1 = dotr(mesh%faces(faceind)%m(:,1), r-p1)
-    t2 = dotr(mesh%faces(faceind)%m(:,2), r-p2)
-    t3 = dotr(mesh%faces(faceind)%m(:,3), r-p3)
+    rp1 = r-p1
+    rp2 = r-p2
+    rp3 = r-p3
+    t1 = dotr(mesh%faces(faceind)%m(:,1), rp1)
+    t2 = dotr(mesh%faces(faceind)%m(:,2), rp2)
+    t3 = dotr(mesh%faces(faceind)%m(:,3), rp3)
 
-    h = dotr(mesh%faces(faceind)%n, r-p1)
+    h = dotr(mesh%faces(faceind)%n, rp1)
 
     res = (h**2)/3.0_dp*intSm1(r, faceind, mesh) - 1.0_dp/3.0_dp*(t1*intL1(r, faceind, 1, mesh) +&
          t2*intL1(r, faceind, 2, mesh) + t3*intL1(r, faceind, 3, mesh))
@@ -278,7 +296,7 @@ CONTAINS
     INTEGER, INTENT(IN) :: faceind, edgeind
     TYPE(mesh_container), INTENT(IN) :: mesh
     REAL (KIND=dp) :: L, A, sign, h
-    REAL (KIND=dp), DIMENSION(3) :: p, rho, res, p1
+    REAL (KIND=dp), DIMENSION(3) :: p, rho, res, p1, rp1
     REAL (KIND=dp), DIMENSION(3,3) :: m
 
     p1 = mesh%nodes(mesh%faces(faceind)%node_indices(1))%p
@@ -286,7 +304,8 @@ CONTAINS
     sign = get_face_sign(faceind, edgeind, mesh)
     p = get_face_bnode(faceind, edgeind, mesh)
 
-    h = dotr(mesh%faces(faceind)%n, r-p1)
+    rp1 = r-p1
+    h = dotr(mesh%faces(faceind)%n, rp1)
     L = mesh%edges(mesh%faces(faceind)%edge_indices(edgeind))%length
     A = mesh%faces(faceind)%area
 
@@ -305,7 +324,7 @@ CONTAINS
     INTEGER, INTENT(IN) :: faceind, edgeind
     TYPE(mesh_container), INTENT(IN) :: mesh
     REAL (KIND=dp) :: L, A, sign, h
-    REAL (KIND=dp), DIMENSION(3) :: p, rho, res, p1
+    REAL (KIND=dp), DIMENSION(3) :: p, rho, res, p1, rp1
     REAL (KIND=dp), DIMENSION(3,3) :: m
 
     p1 = mesh%nodes(mesh%faces(faceind)%node_indices(1))%p
@@ -313,7 +332,8 @@ CONTAINS
     sign = get_face_sign(faceind, edgeind, mesh)
     p = get_face_bnode(faceind, edgeind, mesh)
 
-    h = dotr(mesh%faces(faceind)%n, r-p1)
+    rp1 = r-p1
+    h = dotr(mesh%faces(faceind)%n, rp1)
     L = mesh%edges(mesh%faces(faceind)%edge_indices(edgeind))%length
     A = mesh%faces(faceind)%area
 
@@ -332,13 +352,14 @@ CONTAINS
     INTEGER, INTENT(IN) :: faceind, edgeind
     TYPE(mesh_container), INTENT(IN) :: mesh
     REAL (KIND=dp) :: h
-    REAL (KIND=dp), DIMENSION(3) :: p, n, res
+    REAL (KIND=dp), DIMENSION(3) :: p, n, res, rp
     REAL (KIND=dp), DIMENSION(3,3) :: m
 
     p = mesh%nodes(mesh%faces(faceind)%node_indices(1))%p
 
+    rp = r-p
     n = mesh%faces(faceind)%n
-    h = dotr(n, r-p)
+    h = dotr(n, rp)
     m = mesh%faces(faceind)%m
 
     IF(h==0) THEN
@@ -358,13 +379,14 @@ CONTAINS
     INTEGER, INTENT(IN) :: faceind, edgeind
     TYPE(mesh_container), INTENT(IN) :: mesh
     REAL (KIND=dp) :: h
-    REAL (KIND=dp), DIMENSION(3) :: p, n, res
+    REAL (KIND=dp), DIMENSION(3) :: p, n, res, rp
     REAL (KIND=dp), DIMENSION(3,3) :: m
 
     p = mesh%nodes(mesh%faces(faceind)%node_indices(1))%p
 
+    rp = r-p
     n = mesh%faces(faceind)%n
-    h = dotr(n, r-p)
+    h = dotr(n, rp)
     m = mesh%faces(faceind)%m
 
     res = m(:,1)*intLm1(r, faceind, 1, mesh) +&
@@ -377,7 +399,7 @@ CONTAINS
     REAL (KIND=dp), DIMENSION(3), INTENT(IN) :: r
     INTEGER, INTENT(IN) :: faceind, edgeind
     TYPE(mesh_container), INTENT(IN) :: mesh
-    REAL (KIND=dp), DIMENSION(3) :: p, res
+    REAL (KIND=dp), DIMENSION(3) :: p, res, rp
     REAL (KIND=dp) :: L, A, sign
 
     sign = get_face_sign(faceind, edgeind, mesh)
@@ -385,15 +407,16 @@ CONTAINS
 
     L = mesh%edges(mesh%faces(faceind)%edge_indices(edgeind))%length
     A = mesh%faces(faceind)%area
-
-    res = -sign*L/(2.0_dp*A)*crossr((r-p), intK31(r, faceind, edgeind, mesh))
+    
+    rp = r-p
+    res = -sign*L/(2.0_dp*A)*crossr((rp), intK31(r, faceind, edgeind, mesh))
   END FUNCTION intK41
 
   FUNCTION intK4m1(r, faceind, edgeind, mesh) RESULT(res)
     REAL (KIND=dp), DIMENSION(3), INTENT(IN) :: r
     INTEGER, INTENT(IN) :: faceind, edgeind
     TYPE(mesh_container), INTENT(IN) :: mesh
-    REAL (KIND=dp), DIMENSION(3) :: p, res
+    REAL (KIND=dp), DIMENSION(3) :: p, res, rp
     REAL (KIND=dp) :: L, A, sign
 
     sign = get_face_sign(faceind, edgeind, mesh)
@@ -402,6 +425,7 @@ CONTAINS
     L = mesh%edges(mesh%faces(faceind)%edge_indices(edgeind))%length
     A = mesh%faces(faceind)%area
 
-    res = -sign*L/(2.0_dp*A)*crossr((r-p), intK3m1(r, faceind, edgeind, mesh))
+    rp = r-p
+    res = -sign*L/(2.0_dp*A)*crossr((rp), intK3m1(r, faceind, edgeind, mesh))
   END FUNCTION intK4m1
 END MODULE intbase

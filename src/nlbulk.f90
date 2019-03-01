@@ -4,36 +4,9 @@
 ! Bulk nonlinear sources.
 MODULE nlbulk
   USE nfields
+  USE data
   
   IMPLICIT NONE
-
-  ! Properties of material bulk nonlinearity.
-  TYPE medium_nlb
-     COMPLEX (KIND=dp) :: delta_prime
-     COMPLEX (KIND=dp) :: gamma
-     !COMPLEX (KIND=dp) :: chi2zzz ! deprecated
-
-     ! Maps (Ex**2,Ey**2,Ez**2,EyEz,ExEz,ExEy) to (Px,Py,Pz) in crystal frame.
-     ! chi2 is in D-matrix form with Kleinman's symmetry
-     ! d_il=(d11,d12,...,d16;
-     !       d21,d22,...,d26;
-     !       d31,d32,...,d36)
-     ! ijk  11  22  33  23,32   31,13   12,21
-     !  l    1   2   3      4       5       6
-     COMPLEX (KIND=dp), DIMENSION(3,6) :: chi2
-
-     ! Maps (ExExEx,...) to (Px,Py,Pz) in crystal frame.
-     ! chi3 is in D-matrix form with Kleinman's symmetry
-     ! d_il=(d11,d12,...,d110;
-     !       d21,d22,...,d210;
-     !       d31,d32,...,d310)
-     ! ijk  111 222 333 233,323,332 322,232,223 331,313,133 113,131,311 122,212,221 112,121,211 123,132,213,231,312,321
-     !  l    1   2   3       4           5           6           7           8           9                 10
-     COMPLEX (KIND=dp), DIMENSION(3,10) :: chi3
-
-     ! T maps from crystal frame to lab frame. invT = inverse(T).
-     REAL (KIND=dp), DIMENSION(3,3) :: T, invT
-  END type medium_nlb
 
 CONTAINS
   ! Computes the action on nonlinear bulk dipole polarization Pnlb.

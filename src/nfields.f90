@@ -5,14 +5,9 @@
 ! of scatterers.
 MODULE nfields
   USE srcint
+  USE data
 
   IMPLICIT NONE
-
-  TYPE nfield_plane
-     REAL (KIND=dp), DIMENSION(3) :: origin, v1, v2
-     REAL (KIND=dp) :: d1, d2
-     INTEGER :: n1, n2
-  END TYPE nfield_plane
 
 CONTAINS
   ! Scattered fields at position r.

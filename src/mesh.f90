@@ -6,6 +6,7 @@
 ! Contains also functions for splitting a mesh into submeshes and various mesh manipulation routines.
 MODULE mesh
   USE aux
+  USE data
   USE linalg
 
   IMPLICIT NONE
@@ -22,65 +23,59 @@ MODULE mesh
        mesh_bnd_rz1 = 9,&
        mesh_bnd_rz2 = 10
 
-  TYPE node
-     REAL (KIND=dp), DIMENSION(3) :: p
-     !INTEGER, DIMENSION(:), POINTER :: face_indices, node_indices
-     INTEGER :: parent_index
-     !INTEGER :: bnd, nbnd
-  END TYPE node
-
-  TYPE face
-     REAL (KIND=dp), DIMENSION(3) :: n, cp
-     REAL (KIND=dp), DIMENSION(3,3) :: s, m
-     INTEGER, DIMENSION(3) :: node_indices
-     INTEGER, DIMENSION(3) :: edge_indices
-     REAL (KIND=dp) :: area, pd
-     INTEGER :: id
-     INTEGER :: parent_index
-  END TYPE face
-
-  TYPE line
-     INTEGER, DIMENSION(2) :: node_indices
-     INTEGER :: id
-  END TYPE line
-
-  TYPE edge
-     INTEGER, DIMENSION(2) :: node_indices, bnode_indices, face_indices
-     REAL (KIND=dp) :: length
-!     REAL (KIND=dp), DIMENSION(2) :: rwgDiv
-     INTEGER :: bnd
-     INTEGER :: parent_index
-     INTEGER :: couple_index
-     INTEGER, DIMENSION(:,:), ALLOCATABLE :: child_indices ! (:,1)=submesh, (:,2)=local edge
-  END TYPE edge
-
-  ! Interior face.
-  TYPE solid_face
-     INTEGER, DIMENSION(3) :: node_indices
-     INTEGER, DIMENSION(2) :: solid_indices, bnode_indices
-     INTEGER :: face_index ! -1 if not a boundary
-     REAL (KIND=dp) :: area
-  END TYPE solid_face
-
-  TYPE solid
-     INTEGER, DIMENSION(4) :: node_indices
-     INTEGER, DIMENSION(4) :: solid_face_indices
-     REAL (KIND=dp) :: volume
-     INTEGER :: id
-  END TYPE solid
-
-  TYPE mesh_container
-     TYPE(node), DIMENSION(:), ALLOCATABLE :: nodes
-     TYPE(face), DIMENSION(:), ALLOCATABLE :: faces
-     TYPE(line), DIMENSION(:), ALLOCATABLE :: lines
-     TYPE(edge), DIMENSION(:), ALLOCATABLE :: edges
-     TYPE(solid), DIMENSION(:), ALLOCATABLE :: solids
-     TYPE(solid_face), DIMENSION(:), ALLOCATABLE :: solid_faces
-     INTEGER :: nnodes, nfaces, nlines, nedges, nsolids, nsolid_faces
-     REAL (KIND=dp) :: avelen
-  END TYPE mesh_container
-
 CONTAINS
+
+  ! Used when input comes from json file
+  SUBROUTINE prepare_mesh ( geom )
+    TYPE(geom_type), INTENT(INOUT)  :: geom
+
+    INTEGER                         :: idom, isurf, lenstr, nvol
+    INTEGER, DIMENSION(:), POINTER  :: vol_ids
+    CHARACTER(LEN=256)              :: filename
+
+    ! load mesh elements from .msh file
+    geom%mesh%elements = load_mesh( geom%mesh%file )
+    CALL build_mesh(geom%mesh%elements, geom%mesh%scale)
+
+    DO idom = 0, SIZE(geom%domain(0:))-1
+      vol_ids => NULL()
+      nvol = SIZE(geom%domain(idom)%volume)
+      IF ( nvol > 0 ) THEN
+        ALLOCATE(vol_ids(1:nvol))
+        vol_ids = geom%domain(idom)%volume
+      END IF
+      geom%domain(idom)%elements =  extract_submesh( geom%mesh%elements,  &
+        ABS(geom%domain(idom)%surface), vol_ids)
+
+      DO isurf = 1, SIZE(geom%domain(idom)%surface)
+        IF( geom%domain(idom)%surface(isurf)==0 ) THEN
+          WRITE(*,*) 'Zero is not a valid surface id!'
+          STOP
+        END IF
+
+        IF( geom%domain(idom)%surface(isurf)<0 ) THEN
+          CALL invert_faces( geom%domain(idom)%elements, &
+                             ABS(geom%domain(idom)%surface(isurf)) )
+        END IF
+      END DO
+
+      CALL build_mesh( geom%domain(idom)%elements, 1.0_dp)
+
+!      filename = TRIM(geom%mesh%file)
+!      lenstr = LEN_TRIM(filename)
+!      filename = filename(1:(lenstr-4)) // '-' // TRIM(num2str(idom)) // '.msh'
+!      CALL save_msh(geom%domain(idom)%elements, geom%mesh%scale, filename)
+
+    END DO
+
+    CALL determine_edge_couples( geom%mesh%elements, 1D-12 )
+    CALL submesh_edge_connectivity( geom%mesh%elements,  &
+                                    geom%domain(0:)%elements )
+    CALL orient_basis( geom%mesh%elements, geom%domain(0:)%elements )
+
+    geom%domain(-1)%elements = geom%mesh%elements
+  END SUBROUTINE prepare_mesh
+
   FUNCTION has_mesh_bnd(mesh, bnd) RESULT(res)
     TYPE(mesh_container), INTENT(IN) :: mesh
     INTEGER, INTENT(IN) :: bnd

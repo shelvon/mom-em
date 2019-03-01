@@ -5,31 +5,10 @@
 ! and its gradient. Implemets also functions for the evaluation of
 ! these functions based on the imported data.
 MODULE greenprd
+  USE data
   USE linalg
 
   IMPLICIT NONE
-
-  TYPE prdcoef
-     COMPLEX (KIND=dp), DIMENSION(:,:,:,:), ALLOCATABLE :: samples
-     COMPLEX (KIND=dp), DIMENSION(:,:,:,:), ALLOCATABLE :: samplesz
-     REAL (KIND=dp), DIMENSION(:,:,:), ALLOCATABLE :: rho ! Jouni's PhD theis, Eq. (3.28)
-     REAL (KIND=dp), DIMENSION(:,:,:), ALLOCATABLE :: kt ! Jouni's PhD theis, Eq. (3.29)
-     REAL (KIND=dp) :: E, k0x, k0y, wl, range ! E, the splitting parameter
-     INTEGER :: ic, jc, kc, n, m, np, npz
-     COMPLEX (KIND=dp) :: ri, ri0, k
-  END TYPE prdcoef
-
-  ! Stores data for pre-computed periodic GF. This data is passed down to
-  ! routines that calculate potential integrals.
-  TYPE prdnfo
-     CHARACTER (LEN=256) :: filename
-     INTEGER :: type
-     INTEGER :: nwl, cwl
-     REAL (KIND=dp) :: dx, dy, dz, phi, phasex1, phasex2, phasey
-     REAL (KIND=dp) :: cp, sp, pwtheta, pwphi
-     LOGICAL :: oblique ! oblique incidence
-     TYPE(prdcoef), DIMENSION(:), ALLOCATABLE :: coef
-  END TYPE prdnfo
 
 CONTAINS
   ! si: start index for interpolation i.e. use t to interpolate

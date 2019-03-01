@@ -3,21 +3,13 @@
 ! DESCRIPTION:
 ! Surface second-order nonlinear source functions.
 MODULE nlsurf
+  USE data
   USE rwgf
   USE symmetry
   USE bc
   USE srcint
 
   IMPLICIT NONE
-
-  ! Description of the surface nonlinearity of material.
-  TYPE medium_nls
-     COMPLEX (KIND=dp) :: chi2_nnn
-     COMPLEX (KIND=dp) :: chi2_ntt
-     COMPLEX (KIND=dp) :: chi2_ttn
-     INTEGER :: nsurf_ids
-     INTEGER, DIMENSION(:), ALLOCATABLE :: surf_ids
-  END TYPE medium_nls
 
 CONTAINS
   ! Evaluate E-field on surface.

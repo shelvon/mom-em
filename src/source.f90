@@ -1,5 +1,6 @@
 ! MODULE: source
 ! AUTHOR: Jouni Makitalo
+! Modified: Xiaorun (Shelvon) ZANG
 ! DESCRIPTION:
 ! Routines for evaluating various source excitations, such as a plane-wave
 ! and focused Gaussian beams of various forms. Contains also routines for
@@ -13,6 +14,7 @@ MODULE source
   USE quad
   USE rwgf
   USE dipole
+  USE pupil
 
   IMPLICIT NONE
 
@@ -32,33 +34,6 @@ MODULE source
        focustype_y = 3,&
        focustype_hg01 = 4,&
        focustype_azimut = 5
-
-  TYPE srcdata
-     ! src_type: Identifier for the excitation source.
-     INTEGER :: type
-
-     ! Angles for a plane-wave excitation.
-     REAL (KIND=dp) :: theta, phi, psi
-
-     ! Phase factor between Ex and Ey, where (Ex,Ey,k) form a right-handed system.
-     COMPLEX (KIND=dp) :: phase
-
-     ! Focused beam excitation parameters.
-     REAL (KIND=dp) :: focal, waist, napr
-
-     ! Normalize beam fields to maximum at focal plane?
-     LOGICAL :: nfocus
-
-     ! Excitation source position for, e.g., beams and a dipole.
-     REAL (KIND=dp), DIMENSION(3) :: pos
-
-     ! In which plane of the source locate
-     CHARACTER (LEN=256) :: sxyz
-
-     ! Dipole moment of a dipole source.
-     COMPLEX (KIND=dp), DIMENSION(3) :: dmom
-
-  END type srcdata
 
 CONTAINS
   ! Electric field of plane-wave with polarization pv,
@@ -527,88 +502,80 @@ CONTAINS
     FUNCTION integI10(theta) RESULT(integ)
       REAL (KIND=dp), INTENT(IN) :: theta
       COMPLEX (KIND=dp) :: common, integ
-      INTEGER :: besm
       REAL (KIND=dp) :: j0
 
       common = integCommon(theta)
-      CALL besselj(besm,0,maxerr,k*r*SIN(theta),j0)
+      j0= besselj(0, k*r*SIN(theta))
       integ = common*(SIN(theta)**3)*j0
     END FUNCTION integI10
 
     FUNCTION integI11(theta) RESULT(integ)
       REAL (KIND=dp), INTENT(IN) :: theta
       COMPLEX (KIND=dp) :: common, integ
-      INTEGER :: besm
       REAL (KIND=dp) :: j1
 
       common = integCommon(theta)
-      CALL besselj(besm,1,maxerr,k*r*SIN(theta),j1)
+      j1= besselj(1, k*r*SIN(theta))
       integ = common*(SIN(theta)**2)*(1.0_dp + 3.0_dp*COS(theta))*j1
     END FUNCTION integI11
 
     FUNCTION integI12(theta) RESULT(integ)
       REAL (KIND=dp), INTENT(IN) :: theta
       COMPLEX (KIND=dp) :: common, integ
-      INTEGER :: besm
       REAL (KIND=dp) :: j1
 
       common = integCommon(theta)
-      CALL besselj(besm,1,maxerr,k*r*SIN(theta),j1)
+      j1= besselj(1, k*r*SIN(theta))
       integ = common*(SIN(theta)**2)*(1.0_dp - COS(theta))*j1
     END FUNCTION integI12
 
     FUNCTION integI00(theta) RESULT(integ)
       REAL (KIND=dp), INTENT(IN) :: theta
       COMPLEX (KIND=dp) :: common, integ
-      INTEGER :: besm
       REAL (KIND=dp) :: j0
 
       common = integCommon(theta)
-      CALL besselj(besm,0,maxerr,k*r*SIN(theta),j0)
+      j0= besselj(0, k*r*SIN(theta))
       integ = common*SIN(theta)*(1.0_dp + COS(theta))*j0
     END FUNCTION integI00
 
     FUNCTION integI01(theta) RESULT(integ)
       REAL (KIND=dp), INTENT(IN) :: theta
       COMPLEX (KIND=dp) :: common, integ
-      INTEGER :: besm
       REAL (KIND=dp) :: j1
 
       common = integCommon(theta)
-      CALL besselj(besm,1,maxerr,k*r*SIN(theta),j1)
+      j1= besselj(1, k*r*SIN(theta))
       integ = common*(SIN(theta)**2)*j1
     END FUNCTION integI01
 
     FUNCTION integI02(theta) RESULT(integ)
       REAL (KIND=dp), INTENT(IN) :: theta
       COMPLEX (KIND=dp) :: common, integ
-      INTEGER :: besm
       REAL (KIND=dp) :: j2
 
       common = integCommon(theta)
-      CALL besselj(besm,2,maxerr,k*r*SIN(theta),j2)
+      j2= besselj(2, k*r*SIN(theta))
       integ = common*SIN(theta)*(1.0_dp - COS(theta))*j2
     END FUNCTION integI02
 
     FUNCTION integI13(theta) RESULT(integ)
       REAL (KIND=dp), INTENT(IN) :: theta
       COMPLEX (KIND=dp) :: common, integ
-      INTEGER :: besm
       REAL (KIND=dp) :: j2
 
       common = integCommon(theta)
-      CALL besselj(besm,2,maxerr,k*r*SIN(theta),j2)
+      j2= besselj(2, k*r*SIN(theta))
       integ = common*SQRT(CMPLX(COS(theta)))*(SIN(THETA)**3)*j2
     END FUNCTION integI13
 
     FUNCTION integI14(theta) RESULT(integ)
       REAL (KIND=dp), INTENT(IN) :: theta
       COMPLEX (KIND=dp) :: common, integ
-      INTEGER :: besm
       REAL (KIND=dp) :: j3
 
       common = integCommon(theta)
-      CALL besselj(besm,3,maxerr,k*r*SIN(theta),j3)
+      j3= besselj(3, k*r*SIN(theta))
       integ = common*SQRT(CMPLX(COS(theta)))*(SIN(THETA)**2)*(1.0_dp-COS(theta))*j3
     END FUNCTION integI14
   END SUBROUTINE compute_focus_NH
@@ -673,47 +640,6 @@ CONTAINS
     !CALL compute_focus_denorm(f, na, w0, ri, omega, pt, e, h, focustype)
     !WRITE(*,*) pt(2), normc(e)
   END SUBROUTINE test_focus
-
-  FUNCTION besselj1d(a,x) RESULT(y)
-    REAL (KIND=dp), INTENT(IN) :: a, x
-    REAL (KIND=dp) :: y, j0, j1, maxerr = 1e-6
-    INTEGER :: besm
-
-    CALL besselj(besm,0,maxerr,a*x,j0)
-    CALL besselj(besm,1,maxerr,a*x,j1)
-    y = a*j0 - 1.0_dp/x*j1
-  END FUNCTION besselj1d
-
-  FUNCTION besselj1dd(a,x) RESULT(y)
-    REAL (KIND=dp), INTENT(IN) :: a, x
-    REAL (KIND=dp) :: y, j0, j1, maxerr = 1e-6
-    INTEGER :: besm
-
-    CALL besselj(besm,0,maxerr,a*x,j0)
-    CALL besselj(besm,1,maxerr,a*x,j1)
-    y = -(a**2)*j1 - a/x*j0 + 1.0_dp/(x**2)*j1
-  END FUNCTION besselj1dd
-
-  FUNCTION besselj3d(a,x) RESULT(y)
-    REAL (KIND=dp), INTENT(IN) :: a, x
-    REAL (KIND=dp) :: y, j2, j3, maxerr = 1e-6
-    INTEGER :: besm
-
-    CALL besselj(besm,2,maxerr,a*x,j2)
-    CALL besselj(besm,3,maxerr,a*x,j3)
-    y = a*j2 - 3.0_dp/x*j3
-  END FUNCTION besselj3d
-
-  FUNCTION besselj3dd(a,x) RESULT(y)
-    REAL (KIND=dp), INTENT(IN) :: a, x
-    REAL (KIND=dp) :: y, j1, j2, j3, maxerr = 1e-6
-    INTEGER :: besm
-
-    CALL besselj(besm,1,maxerr,a*x,j1)
-    CALL besselj(besm,2,maxerr,a*x,j2)
-    CALL besselj(besm,3,maxerr,a*x,j3)
-    y = (a**2)*j1 - 2.0_dp*a/x*j2 - 3.0_dp*a/x*j2 + 9.0_dp/(x**2)*j3
-  END FUNCTION besselj3dd
 
   FUNCTION beam_max_pt(k, f, w0, theta_max, focustype) RESULT(r)
     INTEGER, INTENT(IN) :: focustype
@@ -794,33 +720,30 @@ CONTAINS
     FUNCTION integI11(theta) RESULT(integ)
       REAL (KIND=dp), INTENT(IN) :: theta
       COMPLEX (KIND=dp) :: common, integ
-      INTEGER :: besm
       REAL (KIND=dp) :: j1
 
       common = integCommon(theta)
-      CALL besselj(besm,1,maxerr,k*r*SIN(theta),j1)
+      j1=besselj(1,k*r*SIN(theta))
       integ = common*(SIN(theta)**2)*(1.0_dp + 3.0_dp*COS(theta))*j1
     END FUNCTION integI11
 
     FUNCTION integI12(theta) RESULT(integ)
       REAL (KIND=dp), INTENT(IN) :: theta
       COMPLEX (KIND=dp) :: common, integ
-      INTEGER :: besm
       REAL (KIND=dp) :: j1
 
       common = integCommon(theta)
-      CALL besselj(besm,1,maxerr,k*r*SIN(theta),j1)
+      j1=besselj(1,k*r*SIN(theta))
       integ = common*(SIN(theta)**2)*(1.0_dp - COS(theta))*j1
     END FUNCTION integI12
 
     FUNCTION integI14(theta) RESULT(integ)
       REAL (KIND=dp), INTENT(IN) :: theta
       COMPLEX (KIND=dp) :: common, integ
-      INTEGER :: besm
       REAL (KIND=dp) :: j3
 
       common = integCommon(theta)
-      CALL besselj(besm,3,maxerr,k*r*SIN(theta),j3)
+      j3=besselj(3,k*r*SIN(theta))
       integ = common*SQRT(CMPLX(COS(theta)))*(SIN(THETA)**2)*(1.0_dp-COS(theta))*j3
     END FUNCTION integI14
 
@@ -951,4 +874,42 @@ CONTAINS
        WRITE(*,*) 'source type: ', 'dipole'
     END IF
   END SUBROUTINE print_source_info
+
+  FUNCTION besselj1d(a,x) RESULT(y)
+    REAL (KIND=dp), INTENT(IN) :: a, x
+    REAL (KIND=dp) :: y, j0, j1
+
+    j0=besselj(0,a*x)
+    j1=besselj(1,a*x)
+    y = xbesseljd_int(1, a*x, 1)
+  END FUNCTION besselj1d
+
+  FUNCTION besselj1dd(a,x) RESULT(y)
+    REAL (KIND=dp), INTENT(IN) :: a, x
+    REAL (KIND=dp) :: y, j0, j1
+
+    j0=besselj(0,a*x)
+    j1=besselj(1,a*x)
+    y = -(a**2)*j1 - a/x*j0 + 1.0_dp/(x**2)*j1
+  END FUNCTION besselj1dd
+
+  FUNCTION besselj3d(a,x) RESULT(y)
+    REAL (KIND=dp), INTENT(IN) :: a, x
+    REAL (KIND=dp) :: y, j2, j3
+    INTEGER :: besm
+
+    j2=besselj(2,a*x)
+    j3=besselj(3,a*x)
+    y = a*j2 - 3.0_dp/x*j3
+  END FUNCTION besselj3d
+
+  FUNCTION besselj3dd(a,x) RESULT(y)
+    REAL (KIND=dp), INTENT(IN) :: a, x
+    REAL (KIND=dp) :: y, j1, j2, j3
+
+    j1=besselj(1,a*x)
+    j2=besselj(2,a*x)
+    j3=besselj(3,a*x)
+    y = (a**2)*j1 - 2.0_dp*a/x*j2 - 3.0_dp*a/x*j2 + 9.0_dp/(x**2)*j3
+  END FUNCTION besselj3dd
 END MODULE source

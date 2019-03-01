@@ -5,7 +5,9 @@
 ! The interface basically help in filling the data in the batch type
 ! (see common.f90) in the most frequent uses.
 MODULE interface
+  USE data
   USE solver
+  USE material
   USE modes
   USE diffr
   USE ffields
@@ -135,13 +137,13 @@ CONTAINS
        CALL solve_batch(b)
     ELSE IF(method=='mode') THEN
        WRITE(*,*) "Solving the modes ..."
-       CALL modes_mueller(b)
+       CALL modes_mueller_b(b)
     ELSE IF(method=='focal') THEN
        WRITE(*,*) "Calculating the focal field only ..."
-       READ(line, *, IOSTAT = IOEM) method, b%focal%jMax ! Read method specification, if any
+       ! READ(line, *, IOSTAT = IOEM) method, b%focal%jMax ! Read method specification, if any
        ! jMax is the largest order of Bessel function of first kind to be included
        ! jMax is also related to the order of Fourier series expansion
-       CALL solve_focal(b)
+       ! CALL solve_source(b)
     END IF
 
   END SUBROUTINE read_solv
@@ -282,9 +284,9 @@ CONTAINS
 
           ! Fetch the refractive indices for the domain.
           DO n=1,b%nwl
-             b%media(mindex)%prop(n)%ri = get_refind(TRIM(ADJUSTL(file)), b%sols(n)%wl)
-             b%media(mindex)%prop(n)%shri = get_refind(TRIM(ADJUSTL(file)), b%sols(n)%wl*0.5_dp)
-             b%media(mindex)%prop(n)%thri = get_refind(TRIM(ADJUSTL(file)), b%sols(n)%wl*1.0_dp/3.0_dp)
+             b%media(mindex)%prop(n)%ri = get_ri_table(TRIM(ADJUSTL(file)), b%sols(n)%wl)
+             b%media(mindex)%prop(n)%shri = get_ri_table(TRIM(ADJUSTL(file)), b%sols(n)%wl*0.5_dp)
+             b%media(mindex)%prop(n)%thri = get_ri_table(TRIM(ADJUSTL(file)), b%sols(n)%wl*1.0_dp/3.0_dp)
           END DO
 
           WRITE(*,'(A,I0,A,A)') 'Set medium ', mindex, ' refractive index to ', TRIM(file)
@@ -605,14 +607,14 @@ CONTAINS
     IF(token=='pw') THEN
        b%src(index)%type = src_pw
        READ(line,*) index, token, b%src(index)%theta, b%src(index)%phi, b%src(index)%psi
-       b%src(index)%theta = b%src(index)%theta*degtorad
-       b%src(index)%phi = b%src(index)%phi*degtorad
-       b%src(index)%psi = b%src(index)%psi*degtorad
+       b%src(index)%theta = b%src(index)%theta*deg2rad
+       b%src(index)%phi = b%src(index)%phi*deg2rad
+       b%src(index)%psi = b%src(index)%psi*deg2rad
     ELSE IF(token=='pw_elliptic') THEN
        b%src(index)%type = src_pw_elliptic
        READ(line,*) index, token, b%src(index)%theta, b%src(index)%phi, b%src(index)%phase
-       b%src(index)%theta = b%src(index)%theta*degtorad
-       b%src(index)%phi = b%src(index)%phi*degtorad
+       b%src(index)%theta = b%src(index)%theta*deg2rad
+       b%src(index)%phi = b%src(index)%phi*deg2rad
     ELSE IF(token=='focus_rad') THEN
        b%src(index)%type = src_focus_rad
        READ(line,*) index, token, b%src(index)%focal, b%src(index)%waist, b%src(index)%napr, nfocus
@@ -655,7 +657,7 @@ CONTAINS
     CHARACTER (LEN=*), INTENT(IN) :: line
     TYPE(batch), INTENT(INOUT) :: b
 
-    TYPE(data_pupil) :: pupil
+    TYPE(pupil_type) :: pupil
     CHARACTER (LEN=32) :: pupil_type
     CHARACTER (LEN=32) :: aperture_name
     CHARACTER (LEN=32) :: phase_name
@@ -699,12 +701,12 @@ CONTAINS
         ELSE IF(phase_name=='petal_rect') THEN
           READ(line,*)  pupil_type, aperture_name, pupil%aperture%circ%r,   &
                         pupil%phase%type, pupil%phase%petal_rect%l,         &
-                        pupil%phase%petal_rect%lj
+                        pupil%phase%petal_rect%ln
           ! currently only one petal is retained
           pupil%phase%petal_rect%intervals_n = 1
           ALLOCATE(pupil%phase%petal_rect%intervals(1:2,1))
           pupil%phase%petal_rect%intervals(1:2,1) = 2.0*pi/7.0*&
-                        ( (/-1.0, 1.0/)/2.0 + (pupil%phase%petal_rect%lj-1) )
+                        ( (/-1.0, 1.0/)/2.0 + (pupil%phase%petal_rect%ln-1) )
           !test: keep 2.5 petal of petal7
           pupil%phase%petal_rect%l = 7
           pupil%phase%petal_rect%intervals(1:2,1) = 2.0*pi/7.0*&
@@ -741,19 +743,19 @@ CONTAINS
 
     CHARACTER (LEN=1)   :: pl
 
-    READ(line,*)    pl, b%focal%nx, b%focal%xa, b%focal%xb, &
-                    pl, b%focal%ny, b%focal%ya, b%focal%yb, &
-                    pl, b%focal%nz, b%focal%za, b%focal%zb
-    ! WRITE(*,*) b%focal%xa
-
-    ALLOCATE(b%focal%x(1:b%focal%nx), b%focal%y(1:b%focal%ny), b%focal%z(1:b%focal%nz))
-    ALLOCATE(b%focal%gridx(1:b%focal%ny, 1:b%focal%nx, 1:b%focal%nz))
-    ALLOCATE(b%focal%gridy(1:b%focal%ny, 1:b%focal%nx, 1:b%focal%nz))
-    ALLOCATE(b%focal%gridz(1:b%focal%ny, 1:b%focal%nx, 1:b%focal%nz))
-    ALLOCATE(b%focal%grid(3,1:b%focal%ny, 1:b%focal%nx, 1:b%focal%nz))
-
-    CALL meshgrid(b%focal)
-
+!    READ(line,*)    pl, b%focal%nx, b%focal%xa, b%focal%xb, &
+!                    pl, b%focal%ny, b%focal%ya, b%focal%yb, &
+!                    pl, b%focal%nz, b%focal%za, b%focal%zb
+!    ! WRITE(*,*) b%focal%xa
+!
+!    ALLOCATE(b%focal%x(1:b%focal%nx), b%focal%y(1:b%focal%ny), b%focal%z(1:b%focal%nz))
+!    ALLOCATE(b%focal%gridx(1:b%focal%ny, 1:b%focal%nx, 1:b%focal%nz))
+!    ALLOCATE(b%focal%gridy(1:b%focal%ny, 1:b%focal%nx, 1:b%focal%nz))
+!    ALLOCATE(b%focal%gridz(1:b%focal%ny, 1:b%focal%nx, 1:b%focal%nz))
+!    ALLOCATE(b%focal%grid(3,1:b%focal%ny, 1:b%focal%nx, 1:b%focal%nz))
+!
+!    CALL meshgrid(b%focal)
+!
 !    IF(pl=='x') THEN
 !      READ(line,*) pl, n
 !      IF(n==1) THEN

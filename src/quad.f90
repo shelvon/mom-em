@@ -4,6 +4,7 @@
 ! Quadrature routines for integartion over triangles and tetrahedra (Gauss-Legendre).
 ! Also routines for Simpson quadrature over interval and rectangle.
 MODULE quad
+  USE data
   USE mesh
 
   IMPLICIT NONE
@@ -266,14 +267,28 @@ MODULE quad
        0.399403576166799,&
        0.100596423833201/),(/11,4/))
 
-  TYPE quad_data
-     CHARACTER (LEN=256) :: description
-     INTEGER :: num_nodes
-     REAL (KIND=dp), DIMENSION(:), ALLOCATABLE :: weights
-     REAL (KIND=dp), DIMENSION(:,:), ALLOCATABLE :: nodes
-  END type quad_data
-
 CONTAINS
+
+  SUBROUTINE prepare_quad( domain )
+    TYPE(domain_type), DIMENSION(-1:), INTENT(INOUT) :: domain
+
+    INTEGER   :: idom, iquad
+
+    domain(-1)%quad(2)%qd = tri_quad_data( TRIM(domain(-1)%quad(2)%rule) )
+    domain(-1)%quad(3)%qd = tetra_quad_data( TRIM(domain(-1)%quad(3)%rule) )
+    DO idom = 0, (SIZE(domain(0:))-1)
+      DO iquad = 1, SIZE(domain(idom)%quad)
+        IF ( domain(idom)%quad(iquad)%dim == 2 ) THEN
+          domain(idom)%quad(iquad)%qd = &
+            tri_quad_data( TRIM(domain(idom)%quad(iquad)%rule) )
+        ELSE IF ( domain(idom)%quad(iquad)%dim == 3 ) THEN
+          domain(idom)%quad(iquad)%qd = &
+            tetra_quad_data( TRIM(domain(idom)%quad(iquad)%rule) )
+        END IF
+      END DO
+    END DO
+  END SUBROUTINE prepare_quad
+
   FUNCTION tri_quad_data(name) RESULT(qd)
     CHARACTER (LEN=*) :: name
     TYPE(quad_data) :: qd
@@ -446,10 +461,15 @@ CONTAINS
 
     s2 = sleft + sright
 
-    !IF(bottom<=0 .OR. (ABS(s2 - s)<=15*eps .AND. bottom<4) ) THEN
-    IF(level>=maxDepth .OR. (ABS(s2 - s)<=15*eps*ABS(s2) .AND. level>1) ) THEN
-    !IF(ABS(s2 - s)<=15*eps) THEN
+    ! IF(bottom<=0 .OR. (ABS(s2 - s)<=15*eps .AND. bottom<4) ) THEN
+    ! IF(level>=maxDepth .OR. (ABS(s2 - s)<=15*eps*ABS(s2) .AND. level>1) ) THEN
+    IF(level>=maxDepth .OR. (ABS(s2 - s)<=15*eps .AND. level>1) ) THEN
        res = s2 + (s2 - s)/15
+      IF ( level>=maxDepth ) THEN
+       WRITE(*,*) 'Numerical integration fails as the setup accuracy is &
+                  not achieved for maximum (',maxDepth,') steps of iteration.'
+       STOP
+      END IF
     ELSE
        res = asqz_aux(f, a, c, eps/2, sleft, fa, fc, fd, level+1, maxDepth) +&
             asqz_aux(f, c, b, eps/2, sright, fc, fb, fe, level+1, maxDepth)
@@ -459,9 +479,9 @@ CONTAINS
   ! Adaptive Simpson's method based on listing at
   ! http://en.wikipedia.org/wiki/Adaptive_Simpson%27s_method#C
   FUNCTION asqz(f, a, b, eps, maxDepth) RESULT(res)
-    COMPLEX (KIND=dp), EXTERNAL :: f
-    REAL (KIND=dp), INTENT(IN) :: a, b, eps
-    INTEGER, INTENT(IN) :: maxDepth
+    COMPLEX(KIND=dp), EXTERNAL    :: f
+    REAL(KIND=dp), INTENT(IN)     :: a, b, eps
+    INTEGER, INTENT(IN)           :: maxDepth
 
     COMPLEX (KIND=dp) :: fa, fb, fc, s, res
     REAL (KIND=dp) :: c, h

@@ -134,6 +134,156 @@ CONTAINS
 
   END SUBROUTINE matrix_inverse
 
+  ! Solve least square problem through QR factorization with column pivoting,
+  ! as the matrix a is potentially a rank-deficient. For more details,
+  ! refer to section "LAPACK Least Squares and Eigenvalue Problem Routines"
+  SUBROUTINE solve_lsqr(A, b)
+    COMPLEX(KIND=dp), DIMENSION(:,:), INTENT(INOUT)   :: A
+    COMPLEX(KIND=dp), DIMENSION(:), INTENT(INOUT)     :: b
+
+    COMPLEX(KIND=dp), PARAMETER                       ::  &
+                      z1 = CMPLX(1.0_dp, 0.0_dp), &
+                      z0 = CMPLX(0.0_dp, 0.0_dp)
+    COMPLEX(KIND=dp), DIMENSION(:), ALLOCATABLE       :: work, tau, work_query
+    REAL(KIND=dp), DIMENSION(:), ALLOCATABLE          :: rwork
+    ! COMPLEX(KIND=dp), DIMENSION(:,:), ALLOCATABLE     :: R
+    INTEGER, DIMENSION(:), ALLOCATABLE                :: jpvt
+    INTEGER         :: lwork, lda, ldb, i, j, k, l, m, n, nrhs, info
+
+    n = SIZE(A,2)
+    m = SIZE(A,1)
+    nrhs = 1
+    lda = m
+    ldb = m
+    IF ( m .NE. n ) THEN
+      WRITE(*,*) 'Not a square matrix!'
+      STOP
+    END IF
+
+    ALLOCATE( tau(1:n), rwork(1:2*n) )
+    ! jpvt(1:n) = 0 ! all columns are free to be interchange
+    ! jpvt(1) = 1 ! all columns are free to be interchange
+
+    ! ?geqp3
+    ! Computes the QR factorization of a general m-by-n matrix with column
+    ! pivoting using level 3 BLAS.
+!    lwork = -1            ! workspace query
+!    ALLOCATE( work_query(1) )
+!    CALL zgeqp3(m, n, A, lda, tau, jpvt, work_query, lwork, rwork, info)
+!    lwork = work_query(1) ! solve
+    lwork = 608
+    ALLOCATE( jpvt(lwork), work( MAX(1, lwork) ) )
+    jpvt = 0 ! all columns are free to be interchange
+    CALL zgeqp3(m, n, A, lda, tau, jpvt, work, lwork, rwork, info)
+
+!    lwork = (n+1)*32
+!    ALLOCATE( work(lwork) )
+!    CALL zgeqpf(m, n, A, lda, tau, jpvt, work, rwork, info)
+
+    ! WRITE(*,*) jpvt
+
+    ! ?unmqr
+    ! Multiplies a complex matrix by the unitary matrix Q of the QR
+    ! factorization formed by ?geqrf.
+    Call zunmqr('L','C',m,nrhs,n,a,lda,tau,b,ldb,work,lwork,info)
+
+
+    ! Choose TOL to reflect the relative accuracy of the input data
+    ! numerical rank determination of R
+    k = 0
+    DO i = 1, n
+      IF ( ABS( A(i,i) ) > tol**2*abs(A(1,1)) ) THEN
+        k = k+1
+      END IF
+    END DO
+
+    ! get trapezoidal matrix R = [R11 R12]_(kxn)
+    ! Compute the RZ factorization of the K by K part of R as
+    ! (R1 R2) = (T 0)*Z
+    Call ztzrzf(k,n,a,lda,tau,work,lwork,info)
+
+    ! Compute least squares solutions of triangular problems by
+    ! back substitution in T*Y1 = C1, storing the result in B
+    Call ztrsm('L','U','N','N',k,nrhs,z1,a,lda,b,ldb)
+
+    ! Set the remaining elements of the solutions to zero (to give
+    ! the minimum-norm solutions), Y2 = 0
+    b(k+1:n) = z0
+
+    ! Form W = (Z**H)*Y
+    Call zunmrz('L','C',n,nrhs,k,n-k,a,lda,tau,b,ldb,work,lwork,info)
+    ! WRITE(*,*) b
+
+!    Do i = 1, n
+!      work(jpvt(i)) = b(i)
+!    End Do
+    b(1:n) = work(1:n)
+    ! WRITE(*,*) b
+!    ALLOCATE( R(k,n) )
+!    R = CMPLX(0.0_dp, 0.0_dp)
+!    DO i = 1, k
+!      DO j = 1, n
+!        IF ( j>=i ) THEN
+!          R(i,j) = A(i,j)
+!        END IF
+!      END DO
+!    END DO
+!
+!    m = k
+!    lda = MAX(1, m)
+!    DEALLOCATE( tau )
+!    ALLOCATE( tau( MAX(1, m)) )
+!    lwork = -1
+!    call ZTZRZF(m, n, R, lda, tau, work_query, lwork, info)
+!    lwork = work_query(1)
+!    ALLOCATE( work( MAX(1, lwork) ) )
+!    call ZTZRZF(m, n, m, lda, tau, work, lwork, info)
+!
+!
+!    ! ?unmrz
+!    ! Multiplies a complex matrix by the unitary matrix defined
+!    ! from the factorization formed by ?tzrzf.
+!    m = SIZE(b, 1)
+!    n = SIZE(b, 2)
+!    l = n
+!    lda = m
+!    call zunmrz('L', 'C', m, n, k, l, A, lda, tau, b, ldc, work, lwork, info)
+
+    DEALLOCATE( work, tau, work_query, rwork, jpvt )
+  END SUBROUTINE solve_lsqr
+
+  SUBROUTINE zsvd( A, U, Sigma, VH )
+    COMPLEX(KIND=dp), DIMENSION(:,:), INTENT(IN)    :: A
+    COMPLEX(KIND=dp), DIMENSION(:,:), INTENT(INOUT) :: U
+    REAL(KIND=dp), DIMENSION(:,:), INTENT(INOUT)    :: Sigma
+    COMPLEX(KIND=dp), DIMENSION(:,:), INTENT(INOUT) :: VH
+
+    REAL(KIND=dp), DIMENSION(:), ALLOCATABLE    :: rwork, s ! singular values
+    INTEGER, DIMENSION(:), ALLOCATABLE          :: work
+    INTEGER                         :: lwork, info, in, N
+    CHARACTER(LEN=1)                :: jobu, jobvh
+
+    jobu = 'S'
+    jobvh = 'S'
+    N = SIZE(A,1)
+    ALLOCATE( work(1:3*N), rwork(1:5*N) )
+    ALLOCATE( s(N) )
+
+    lwork = -1
+    CALL ZGESVD(jobu, jobvh, N, N, A, N, s, U, N, VH, N, work, lwork, rwork, info)
+    ! lwork = work(1)
+    lwork = 3*N
+    WRITE(*,*) 'Perform Singular Value Decomposition (SVD):'
+    CALL ZGESVD(jobu, jobvh, N, N, A, N, s, U, N, VH, N, work, lwork, rwork, info)
+
+    ! WRITE(*,*) 'info: ',info
+    DO in = 1, N
+      Sigma(in, in) = s(in)
+    END DO
+
+    DEALLOCATE( work, rwork, s )
+  END SUBROUTINE zsvd
+
   SUBROUTINE solve_linsys(mat, src)
     COMPLEX (KIND=dp), DIMENSION(:,:), INTENT(INOUT) :: mat
     COMPLEX (KIND=dp), DIMENSION(:), INTENT(INOUT) :: src

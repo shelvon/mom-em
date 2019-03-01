@@ -1,97 +1,28 @@
 ! MODULE: pupil
 ! AUTHOR: Xiaorun (Shelvon) ZANG
 ! DESCRIPTION:
-! Routines to define a pupile function inserted in between
-! the incident beam and focusing objective.
+! Routines to define a pupil function inserted in between the incident
+! beam and focusing objective, i.e. right before focusing
+! Here, fun_pupil = fun_aperture x fun_phase.
+
+! Define the pupil function in cylindrical coordinate as P(theta, phi)
+
+! For an analytical pupil function, the pupil function writes as
+! P(theta, phi)=A(theta, phi)*Phi(theta, phi) with
+! A(theta, phi) the aperture/amplitude function;
+! Phi(theta, phi) the phase modulation function.
+
+!!!! to be done:
+! For numerical pupil function:  the pupil function is a
+! two-dimensional matrix with row->theta; column->phi.
 MODULE pupil
+  USE data
   USE constants
 
   IMPLICIT NONE
 
-  ! Define the pupil function in cylindrical coordinate as P(theta, phi)
-
-  ! For an analytical pupile function, the pupil function writes as
-  ! P(theta, phi)=A(theta, phi)*exp(i*Phi(theta, phi)) with
-  ! A(theta, phi) the aperture/amplitude function;
-  ! Phi(theta, phi) the phase modulation function.
-
-  ! For numerical pupile function:  the pupil function is a
-  ! two-dimensional matrix with row->theta; column->phi.
-
-  TYPE data_circ
-    REAL (KIND=dp)      :: r=1  ! radius of circ function, normalized to
-                                ! the waist radius of the incident beam
-  END TYPE data_circ
-
-  ! intervals where function is equal to 1, which is also
-  ! where the phase modulation applies.
-  TYPE data_rect
-    REAL (KIND=dp), DIMENSION(1:2)              :: delta! amount of phase shift [\pi]
-    INTEGER                                     :: intervals_n
-    ! REAL (KIND=dp), DIMENSION(2) :: intervals
-    REAL (KIND=dp), DIMENSION(:,:), ALLOCATABLE :: intervals
-    REAL (KIND=dp), DIMENSION(:,:), ALLOCATABLE :: dj
-    ! with (1,:) stores aj and (2,:) bj
-    ! aj for cos(j\phi) and bj for sin(j\phi)
-  END TYPE data_rect
-
-  ! topological charge of petal beam
-  TYPE data_petal
-    INTEGER :: l ! l is the integer subindex in Petal_{p,l} = LG_{p,l} + LG_{p,-l}
-  END TYPE data_petal
-
-  ! petal beam + rect phase mask
-  TYPE data_petal_rect
-    INTEGER :: l ! l is the integer subindex in Petal_{p,l} = LG_{p,l} + LG_{p,-l}
-    INTEGER :: lj ! lj-petal is retained and the other petals are blocked
-    INTEGER                                     :: intervals_n
-    REAL (KIND=dp), DIMENSION(:,:), ALLOCATABLE :: intervals
-  END TYPE data_petal_rect
-
-  ! theta value: diverging angle of the axicon
-  TYPE data_bessel
-    REAL (KIND=dp)  :: theta ! the angle that goes into Bessel function J_j(k \rho \theta)
-  END TYPE data_bessel
-
-  ! topological charge of vortex beam
-  TYPE data_vortex
-    INTEGER :: charge! 'charge x 2\pi' phase change over one rotation in azimuthal angle
-  END TYPE data_vortex
-
-  TYPE data_aperture
-    ! type of pupil function: either analytical or numerical.
-    CHARACTER (LEN=32)  :: type
-    TYPE(data_circ)     :: circ
-  END TYPE data_aperture
-
-  TYPE data_phase
-    ! type of pupil function: either analytical or numerical.
-    CHARACTER (LEN=32)      :: type
-    TYPE(data_rect)         :: rect
-    TYPE(data_vortex)       :: vortex   !spiral phase plate
-    TYPE(data_petal)        :: petal    !petal beam phase term
-    TYPE(data_bessel)       :: bessel   !bessel beam
-    TYPE(data_petal_rect)   :: petal_rect   !petal beam phase + rect phase
-  END TYPE data_phase
-
-  TYPE data_pupil
-    ! type of pupil function: either analytical or numerical.
-    CHARACTER (LEN=32)  :: type
-
-    ! aperture function
-    TYPE(data_aperture) :: aperture
-
-    ! phase function
-    TYPE(data_phase)    :: phase
-
-    ! complex-valued Fourier expansion coefficient
-    ! by using complex Fourier series
-    ! Works only for pupil function that is independent of radial variable, \rho
-    COMPLEX (KIND=dp), DIMENSION(:), ALLOCATABLE :: cj
-    ! cj = 1/(2*pi)*\Int_{-pi}^{pi} e^{i\Phi(\phi)}e^{-im\phi} d\phi
-  END TYPE data_pupil
-
 CONTAINS
+
   FUNCTION circ(rho) RESULT(res)
     REAL (KIND=dp) :: rho
     REAL :: res
@@ -102,14 +33,6 @@ CONTAINS
       res = 0.0
     END IF
   END FUNCTION circ
-
-!  FUNCTION circAperture(rho,waist) RESULT(res)
-!    REAL (KIND=dp) :: rho
-!    REAL (KIND=dp) :: waist
-!    REAL :: res
-!
-!    res = circ(rho/waist)
-!  END FUNCTION circAperture
 
   FUNCTION rect(t) RESULT(res)
     REAL (KIND=dp) :: t
@@ -146,9 +69,10 @@ CONTAINS
     END DO
   END FUNCTION rectPhase
 
-  ! get fourier series coefficients from equations (3.79) and (3.80) in
-  ! Oppenheim, Alan V., Alan S. Willsky and Syed Hamid Nawab. 1997. Signals & Systems.
-  ! 2nd ed. Prentice-Hall Signal Processing Series. Upper Saddle River, N.J: Prentice Hall.
+  ! Get fourier series coefficients from equations (3.79) and (3.80) in
+  ! Oppenheim, Alan V., Alan S. Willsky and Syed Hamid Nawab.
+  ! 1997. Signals & Systems. 2nd ed. Prentice-Hall Signal Processing Series.
+  ! Upper Saddle River, N.J: Prentice Hall.
   FUNCTION coeffSquareWave(T, T1, t0, k) RESULT(ak)
     REAL (KIND=dp)      :: T, T1, t0
     INTEGER             :: k
@@ -164,7 +88,7 @@ CONTAINS
   END FUNCTION coeffSquareWave
 
   FUNCTION coeffRectPhase(pupil,j) RESULT(dj)
-    TYPE(data_pupil), INTENT(IN)    :: pupil
+    TYPE(pupil_type), INTENT(IN)    :: pupil
     INTEGER, INTENT(IN)             :: j
     INTEGER                         :: n
     REAL (KIND=dp)                  :: aj, bj, delta, Ak
@@ -209,77 +133,170 @@ CONTAINS
     dj=(1.0_dp/pi)*(/aj,bj/)
   END FUNCTION coeffRectPhase
 
-  FUNCTION coeffPupil(pupil,j) RESULT(cj)
-    TYPE(data_pupil), INTENT(IN)    :: pupil
-    INTEGER, INTENT(IN)             :: j
-    COMPLEX (KIND=dp)               :: cj
+  SUBROUTINE pupil_coeff(pupil)
+    TYPE(pupil_type), INTENT(INOUT)     :: pupil
 
-    COMPLEX (KIND=dp)               :: prefix
-    INTEGER                         :: charge, l, lj, id, intervals_n
-    REAL (KIND=dp), DIMENSION(1:2)  :: delta! amount of phase shift [\pi]
-    REAL (KIND=dp), DIMENSION(1:2,pupil%phase%rect%intervals_n) :: intervals,intervalsLower
-    REAL (KIND=dp), DIMENSION(1:2,pupil%phase%petal_rect%intervals_n) :: intervalsPetal
+    COMPLEX(KIND=dp)                    :: prefix
+    INTEGER                             :: n, charge, l, id, intervals_n
+    REAL(KIND=dp), DIMENSION(1:2)       :: delta ! amount of phase shift [\pi]
+    REAL(KIND=dp), DIMENSION(1:2, pupil%phase%rect%intervals_n)  &
+                                        :: intervals, intervalsLower
+    REAL(KIND=dp), DIMENSION(1:2, pupil%phase%petal_rect%intervals_n)  &
+                                        :: intervalsPetal
 
-    IF(pupil%phase%type=='vortex') THEN
-      charge = pupil%phase%vortex%charge
-      IF(j==charge) THEN
-        cj = CMPLX(1.0_dp,0.0_dp)
-      ELSE
-        cj = CMPLX(0.0_dp,0.0_dp)
-      END IF
-    ELSE IF(pupil%phase%type=='petal') THEN
-      l = pupil%phase%petal%l
-      IF(ABS(j)==l) THEN
-        cj = CMPLX(1.0_dp,0.0_dp)
-      ELSE
-        cj = CMPLX(0.0_dp,0.0_dp)
-      END IF
-    ELSE IF(pupil%phase%type=='petal_rect') THEN
-      l = pupil%phase%petal_rect%l
-      lj = pupil%phase%petal_rect%lj
-      intervals_n = pupil%phase%petal_rect%intervals_n
-      intervalsPetal = pupil%phase%petal_rect%intervals
-      IF(j==l) THEN
-        cj = (1.0_dp/(2*pi*2))*( ( intervalsPetal(2,1) - intervalsPetal(1,1) ) -&
-             ( EXP(-(0,1)*(l+j)*intervalsPetal(2,1)) - EXP(-(0,1)*(l+j)*intervalsPetal(1,1)) )/((0,1)*(l+j)) )
-      ELSE IF(j==-l) THEN
-        cj = (1.0_dp/(2*pi*2))*( ( intervalsPetal(2,1) - intervalsPetal(1,1) ) +&
-             ( EXP((0,1)*(l-j)*intervalsPetal(2,1)) - EXP((0,1)*(l-j)*intervalsPetal(1,1)) )/((0,1)*(l-j)) )
-      ELSE
-        cj = (1.0_dp/(2*pi*2))*( -( EXP(-(0,1)*(l+j)*intervalsPetal(2,1)) - EXP(-(0,1)*(l+j)*intervalsPetal(1,1)) )/((0,1)*(l+j)) &
-           + ( EXP((0,1)*(l-j)*intervalsPetal(2,1)) - EXP((0,1)*(l-j)*intervalsPetal(1,1)) )/((0,1)*(l-j)) )
-      END IF
-    ELSE IF(pupil%phase%type=='rect') THEN
-      intervals_n = pupil%phase%rect%intervals_n
-      intervals = pi*pupil%phase%rect%intervals ! convert to unit in [\pi]
-      delta = pi*pupil%phase%rect%delta ! convert to unit in [\pi]
+    pupil%cn = CMPLX(0.0_dp,0.0_dp) ! initialized to zeros
+    DO n = -pupil%phase%nMax, pupil%phase%nMax
+    ! Cylindrical Vector Beams  : CVBs
+    ! State of Polarization     : SOP
 
-      ! phase modulation higher level
-      prefix = (1.0_dp/2/pi)*EXP((0,1)*delta(2))
-      IF(j==0) THEN
-        cj = prefix*SUM(intervals(2,:) - intervals(1,:))
-      ELSE
-        cj = prefix/(-(0,1)*j)*SUM(EXP(-(0,1)*j*intervals(2,:)) - EXP(-(0,1)*j*intervals(1,:)))
+      ! Hermite Gaussian (HG00) beam, i.e. the basis
+      IF ( TRIM(pupil%phase%type) == 'hg00') THEN
+        IF ( n == 0 ) THEN
+          pupil%cn(n) = CMPLX(1.0_dp, 0.0_dp)
+        END IF
+
+      ! Hermite Gaussian (HG01) beam
+      ELSE IF ( TRIM(pupil%phase%type) == 'hg01') THEN
+        IF ( n == 1 ) THEN
+          pupil%cn(n) = CMPLX(0.0_dp, -1.0_dp/2.0_dp)
+        ELSE IF ( n == -1 ) THEN
+          pupil%cn(n) = CMPLX(0.0_dp, 1.0_dp/2.0_dp)
+        END IF
+
+      ! Hermite Gaussian (HG10) beam
+      ELSE IF ( TRIM(pupil%phase%type) == 'hg10' ) THEN
+        IF ( ABS(n) == 1 ) THEN
+          pupil%cn(n) = CMPLX(1.0_dp/2.0_dp, 0.0_dp)
+        END IF
+
+      ! CVBs, local SOP: azimuthally polarized
+      ELSE IF ( TRIM(pupil%phase%type) == 'azi') THEN
+        IF ( n == 1 ) THEN
+          pupil%cn(n) = CMPLX(0.0_dp, -1.0_dp/2.0_dp)
+        ELSE IF ( n == -1 ) THEN
+          pupil%cn(n) = CMPLX(0.0_dp, 1.0_dp/2.0_dp)
+        END IF
+
+      ! CVBs, local SOP: radially polarized
+      ELSE IF ( TRIM(pupil%phase%type) == 'rad') THEN
+        IF ( ABS(n) == 1 ) THEN
+          pupil%cn(n) = CMPLX(1.0_dp/2.0_dp, 0.0_dp)
+        END IF
+
+      ! CVBs, local SOP: m45, i.e. minus 45 [deg] polarized
+      ELSE IF ( TRIM(pupil%phase%type) == 'm45') THEN
+        IF ( n == 1 ) THEN
+          pupil%cn(n) = CMPLX(1.0_dp, -1.0_dp)/2.0_dp
+        ELSE IF ( n == -1 ) THEN
+          pupil%cn(n) = CMPLX(1.0_dp, 1.0_dp)/2.0_dp
+        END IF
+
+      ! CVBs, local SOP: p45, i.e. plus 45 [deg] polarized
+      ELSE IF ( TRIM(pupil%phase%type) == 'p45') THEN
+        IF ( n == 1 ) THEN
+          pupil%cn(n) = CMPLX(1.0_dp, 1.0_dp)/2.0_dp
+        ELSE IF ( n == -1 ) THEN
+          pupil%cn(n) = CMPLX(1.0_dp, -1.0_dp)/2.0_dp
+        END IF
+
+      ! CVBs, local SOP: right-circular polarization
+      ELSE IF ( TRIM(pupil%phase%type) == 'rcp') THEN
+        IF ( n == 1 ) THEN
+          pupil%cn(n) = CMPLX(1.0_dp, 0.0_dp)
+        END IF
+
+      ! CVBs, local SOP: left-circular polarization
+      ELSE IF ( TRIM(pupil%phase%type) == 'lcp') THEN
+        IF ( n == -1 ) THEN
+          pupil%cn(n) = CMPLX(1.0_dp, 0.0_dp)
+        END IF
+
+      ! vortex beam
+      ELSE IF ( TRIM(pupil%phase%type) == 'vortex' ) THEN
+        IF ( n == pupil%phase%vortex%charge ) THEN
+          pupil%cn(n) = CMPLX(1.0_dp,0.0_dp)
+        END IF
+
+      ELSE IF ( TRIM(pupil%phase%type) == 'petal' ) THEN
+        IF ( ABS(n) == pupil%phase%petal%l ) THEN
+          pupil%cn(n) = CMPLX(1.0_dp/2.0_dp,0.0_dp)
+        END IF
+
+      ! bessel beam
+      ELSE IF ( TRIM(pupil%phase%type) == 'bessel' ) THEN
+        IF ( TRIM(pupil%phase%bessel%input) == 'azi' ) THEN
+          IF ( n == 1 ) THEN
+            pupil%cn(n) = CMPLX(0.0_dp, -1.0_dp/2.0_dp)
+          ELSE IF ( n == -1 ) THEN
+            pupil%cn(n) = CMPLX(0.0_dp, 1.0_dp/2.0_dp)
+          END IF
+        ELSE IF ( TRIM(pupil%phase%bessel%input) == 'rad' ) THEN
+          IF ( ABS(n) == 1 ) THEN
+            pupil%cn(n) = CMPLX(1.0_dp/2.0_dp, 0.0_dp)
+          END IF
+        END IF
+
+      ! test for petal with binary phase mask
+      ELSE IF ( TRIM(pupil%phase%type) == 'petal_rect' ) THEN
+        l = pupil%phase%petal_rect%l
+        intervals_n = pupil%phase%petal_rect%intervals_n
+        intervalsPetal = pupil%phase%petal_rect%intervals
+        IF ( n == l ) THEN
+          pupil%cn(n) = (1.0_dp/(2*pi*2))*  &
+            ( ( intervalsPetal(2,1) - intervalsPetal(1,1) ) - &
+            ( EXP(-(0,1)*(l+n)*intervalsPetal(2,1)) -         &
+              EXP(-(0,1)*(l+n)*intervalsPetal(1,1)) )/((0,1)*(l+n)) )
+        ELSE IF ( n == -l ) THEN
+          pupil%cn(n) = (1.0_dp/(2*pi*2))*  &
+            ( ( intervalsPetal(2,1) - intervalsPetal(1,1) ) + &
+            ( EXP((0,1)*(l-n)*intervalsPetal(2,1)) -       &
+              EXP((0,1)*(l-n)*intervalsPetal(1,1)) )/((0,1)*(l-n)) )
+        ELSE
+          pupil%cn(n) = (1.0_dp/(2*pi*2))*  &
+          ( -( EXP(-(0,1)*(l+n)*intervalsPetal(2,1)) -  &
+               EXP(-(0,1)*(l+n)*intervalsPetal(1,1)) )/((0,1)*(l+n)) &
+            +( EXP((0,1)*(l-n)*intervalsPetal(2,1)) -   &
+               EXP((0,1)*(l-n)*intervalsPetal(1,1)) )/((0,1)*(l-n)) )
+        END IF
+
+      ELSE IF ( TRIM(pupil%phase%type) == 'rect' ) THEN
+        intervals_n = pupil%phase%rect%intervals_n
+        intervals = pi*pupil%phase%rect%intervals ! convert to unit in [\pi]
+        delta = pi*pupil%phase%rect%delta ! convert to unit in [\pi]
+
+        ! phase modulation higher level
+        prefix = (1.0_dp/2/pi)*EXP((0,1)*delta(2))
+        IF( n == 0 ) THEN
+          pupil%cn(n) = prefix*SUM(intervals(2,:) - intervals(1,:))
+        ELSE
+          pupil%cn(n) = prefix*(0,1)/n * &
+            SUM(EXP(-(0,1)*n*intervals(2,:)) - EXP(-(0,1)*n*intervals(1,:)))
+        END IF
+
+        ! phase modulation lower level
+        prefix = (1.0_dp/2/pi)*EXP((0,1)*delta(1))
+        intervalsLower(1,:) = (/intervals(2,1:intervals_n)/)
+        intervalsLower(2,:) = (/intervals(1,2:intervals_n), &
+                                intervals(1,1)+2*pi/)
+        IF ( n == 0 ) THEN
+          pupil%cn(n) = pupil%cn(n) + &
+            prefix*SUM(intervalsLower(2,:) - intervalsLower(1,:))
+        ELSE
+          pupil%cn(n) = pupil%cn(n) + prefix*(0,1)/n * &
+            SUM(  EXP(-(0,1)*n*intervalsLower(2,:)) -     &
+                  EXP(-(0,1)*n*intervalsLower(1,:)) )
+        END IF
+
       END IF
 
-      ! phase modulation lower level
-      prefix = (1.0_dp/2/pi)*EXP((0,1)*delta(1))
-      intervalsLower(1,:) = (/intervals(2,1:intervals_n)/)
-      intervalsLower(2,:) = (/intervals(1,2:intervals_n), intervals(1,1)+2*pi/)
-      IF(j==0) THEN
-        cj = cj+prefix*SUM(intervalsLower(2,:) - intervalsLower(1,:))
-      ELSE
-        cj = cj+prefix/(-(0,1)*j)*SUM(EXP(-(0,1)*j*intervalsLower(2,:)) - EXP(-(0,1)*j*intervalsLower(1,:)))
+      ! remove insignificant orders
+      IF ( ABS(REAL(pupil%cn(n))) .LT. tol ) THEN
+        pupil%cn(n) = CMPLX(0.0_dp, AIMAG(pupil%cn(n)))
       END IF
-    END IF
-
-    ! remove insignificant orders
-    IF(REAL(cj) .LT. tol) THEN
-      cj = CMPLX(0.0_dp,AIMAG(cj))
-    END IF
-    IF(AIMAG(cj) .LT. tol) THEN
-      cj = CMPLX(REAL(cj), 0.0_dp)
-    END IF
-  END FUNCTION coeffPupil
+      IF ( ABS(AIMAG(pupil%cn(n))) .LT. tol ) THEN
+        pupil%cn(n) = CMPLX(REAL(pupil%cn(n)), 0.0_dp)
+      END IF
+    END DO
+  END SUBROUTINE pupil_coeff
 
 END MODULE pupil

@@ -9,6 +9,7 @@
 ! where J_m is isometric group action and N is order of the group.
 ! Instead of rho, we use the notion of field action ef = rho^*.
 MODULE symmetry
+  USE data
   USE linalg
 
   IMPLICIT NONE
@@ -23,25 +24,50 @@ MODULE symmetry
        gid_mzp = 4,&
        gid_rz = 5
 
-  TYPE group_action
-     ! Action for electric field. Action for H-field is ef*detj.
-     ! There can be multiple sub-problems with different field actions.
-     COMPLEX (KIND=dp), DIMENSION(:), ALLOCATABLE :: ef
-
-     ! Jacobian the group action for points in R^3.
-     REAL (KIND=dp), DIMENSION(3,3) :: j
-
-     ! Determinant of the jacobian.
-     REAL (KIND=dp) :: detj
-
-     ! Identifier of a special action.
-     INTEGER :: id
-
-     ! Bit flags for group element generators.
-     INTEGER :: genbits
-  END type group_action
-
 CONTAINS
+
+  SUBROUTINE prepare_group(group)
+    TYPE(group_type), INTENT(INOUT) :: group
+    TYPE(group_action), DIMENSION(:), ALLOCATABLE :: ga
+
+    INTEGER                         :: iga, m, nr
+
+    CALL group_id( group%action )
+    
+!    ALLOCATE( group%action(SIZE(group%name)) )
+    DO iga = 1, SIZE(group%name)
+      IF( TRIM(group%name(iga)) == 'id' ) THEN
+        CALL group_id( ga )
+      ELSE IF( TRIM(group%name(iga)) == 'mxp' ) THEN
+        CALL group_mp( 1, ga )
+      ELSE IF( TRIM(group%name(iga)) == 'myp' ) THEN
+        CALL group_mp( 2, ga )
+      ELSE IF( TRIM(group%name(iga)) == 'mzp' ) THEN
+        CALL group_mp( 3, ga )
+      ELSE IF( group%name(iga)(1:1) == 'r' ) THEN
+        READ( group%name(iga)(2:3),*) nr
+        CALL group_rz( nr, ga )
+      ELSE
+        WRITE(*,*) 'Error: unrecognized group!'
+        IF( ALLOCATED( group%action ) ) THEN
+           DO m = 1, SIZE(group%action)
+              DEALLOCATE( group%action(m)%ef)
+           END DO
+           DEALLOCATE(group%action)
+        END IF
+        RETURN
+      END IF
+
+      CALL product_group( group%action, ga)
+
+      DO m = 1, SIZE(ga)
+        DEALLOCATE(ga(m)%ef)
+      END DO
+      DEALLOCATE(ga)
+
+    END DO! iga
+
+  END SUBROUTINE prepare_group
   SUBROUTINE group_id(ga)
     TYPE(group_action), DIMENSION(:), ALLOCATABLE, INTENT(INOUT) :: ga
 
