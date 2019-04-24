@@ -136,7 +136,7 @@ contains
                call push_char(c)
                nullify(value)
             case ('"')
-                ! string
+                ! string                                      
                 value % value_type = TYPE_STRING
                 value % value_string => parse_string(unit, str)
             case ("t")
@@ -383,7 +383,7 @@ contains
                     scientific = .true.
                     decimal = .true.
                     ! this number has an exponent
-                    exp = parse_integer(unit, str)
+                    exp = int(parse_integer(unit, str), kind = 4)
                 case default
                     if (decimal) then
                         ! add the integral
@@ -397,15 +397,16 @@ contains
                             frac = -frac
                         end if
                         value % value_type = TYPE_REAL
-                        value % value_real = frac
+                        value % value_real = real(frac)
                         value % value_double = frac
                     else
-                        if (negative) then
-                           ! apply negative
-                           integral = -integral
-                        end if
-                        value % value_type = TYPE_INTEGER
-                        value % value_integer = integral
+                       if (negative) then
+                          ! apply negative
+                          integral = -integral
+                       end if
+                       value % value_type = TYPE_INTEGER
+                       value % value_integer = int(integral, kind = 4)
+                       value % value_long_integer = integral
                     end if
                     call push_char(c)
                     exit

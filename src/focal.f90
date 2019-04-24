@@ -4,500 +4,370 @@
 ! Routines to focal field definition and calculation.
 MODULE focal
   USE data
-  USE pupil
   USE quad
   USE aux
   USE linalg
   USE time
   USE bessel
-  ! USE hankel_api
+  USE pupil
 
   IMPLICIT NONE
 
 CONTAINS
 
-  ! determine the equivalent pupil function for the focused beam
-  FUNCTION focus2pupil(focus) RESULT(pupil)
-    TYPE(focus_type), INTENT(IN)      :: focus
-    TYPE(pupil_type)                  :: pupil
-
-    ! initialize pupil_type::pupil
-    pupil%type = 'analytical'
-    pupil%aperture%type = 'circ'
-    pupil%aperture%circ%r = 1
-    pupil%phase%type = focus%type
-    pupil%phase%input = 'hg00'
-    pupil%phase%thetaRot=0.0_dp ! counter clockwise rotation
-    pupil%phase%vJones(1)=CMPLX(1.0_dp, 0.0_dp)
-    pupil%phase%vJones(2)=CMPLX(0.0_dp, 0.0_dp)
-    pupil%phase%nMax = 1
-
-    ! modification for each focus beam
-    IF ( focus%type == 'hg10' .OR.  &
-         focus%type == 'hg01' ) THEN
-
-    ELSE IF ( focus%type == 'hg00' ) THEN
-      pupil%phase%nMax = 0
-
-    ELSE IF ( focus%type == 'rad' ) THEN
-      ! rad = hg10*nx + hg10*ny, local SOP in radial direction
-      pupil%phase%vJones(1) = CMPLX(1.0_dp/SQRT(2.0_dp), 0.0_dp)
-      pupil%phase%vJones(2) = CMPLX(1.0_dp/SQRT(2.0_dp), 0.0_dp)
-
-    ELSE IF ( focus%type == 'azi' ) THEN
-      ! azi = hg01*nx + hg01*ny, local SOP in azimuthal direction, clockwise
-      pupil%phase%vJones(1) = CMPLX(1.0_dp/SQRT(2.0_dp), 0.0_dp)
-      pupil%phase%vJones(2) = CMPLX(1.0_dp/SQRT(2.0_dp), 0.0_dp)
-
-    ELSE IF ( focus%type == 'm45' ) THEN ! m45 stands for minus 45
-      ! general CVB, local SOP in the direction of -45 [deg], minus 45
-      ! with respect to the positive radial axis
-      pupil%phase%vJones(1) = CMPLX(1.0_dp/SQRT(2.0_dp), 0.0_dp)
-      pupil%phase%vJones(2) = CMPLX(1.0_dp/SQRT(2.0_dp), 0.0_dp)
-
-    ELSE IF ( focus%type == 'p45' ) THEN! p45 stands for plus 45
-      ! general CVB, local SOP in the direction of +45 [deg]
-      ! with respect to the positive radial axis
-      pupil%phase%vJones(1) = CMPLX(1.0_dp/SQRT(2.0_dp), 0.0_dp)
-      pupil%phase%vJones(2) = CMPLX(1.0_dp/SQRT(2.0_dp), 0.0_dp)
-
-    ELSE IF ( focus%type == 'rcp' ) THEN! rcp stands for right-circular pol.
-      ! general CVB, local SOP is right-circular polarization
-      ! with respect to the positive radial axis
-      pupil%phase%vJones(1) = CMPLX(1.0_dp/SQRT(2.0_dp), 0.0_dp)
-      pupil%phase%vJones(2) = CMPLX(1.0_dp/SQRT(2.0_dp), 0.0_dp)
-
-    ELSE IF ( focus%type == 'lcp' ) THEN! lcp stands for left-circular pol.
-      ! general CVB, local SOP is left-circular polarization
-      ! with respect to the positive radial axis
-      pupil%phase%vJones(1) = CMPLX(1.0_dp/SQRT(2.0_dp), 0.0_dp)
-      pupil%phase%vJones(2) = CMPLX(1.0_dp/SQRT(2.0_dp), 0.0_dp)
-    ELSE IF ( focus%type == 'bessel' ) THEN
-      pupil%phase%bessel = focus%bessel
-
-      IF ( TRIM(pupil%phase%bessel%input) == 'rad' ) THEN
-        ! rad = hg10*nx + hg10*ny
-        pupil%phase%vJones(1) = CMPLX(1.0_dp/SQRT(2.0_dp), 0.0_dp)
-        pupil%phase%vJones(2) = CMPLX(1.0_dp/SQRT(2.0_dp), 0.0_dp)
-
-      ELSE IF ( TRIM(pupil%phase%bessel%input) == 'azi' ) THEN
-        ! azi = hg01*nx + hg01*ny, clockwise
-        pupil%phase%vJones(1) = CMPLX(1.0_dp/SQRT(2.0_dp), 0.0_dp)
-        pupil%phase%vJones(2) = CMPLX(1.0_dp/SQRT(2.0_dp), 0.0_dp)
-      END IF
-
-    ELSE
-      WRITE(*,*) 'The focused beam is not supported!'
-    END IF
-
-    ! get expansion coefficients
-    ALLOCATE( pupil%cn(-pupil%phase%nMax:pupil%phase%nMax) )
-    CALL pupil_coeff(pupil)
-  END FUNCTION focus2pupil
-
   SUBROUTINE focal_field(focus, wl, ri1, ri2, grid, field)
     TYPE(focus_type), INTENT(IN)            :: focus
     REAL(KIND=dp), INTENT(IN)               :: wl
     COMPLEX(KIND=dp), INTENT(IN)            :: ri1, ri2
-    TYPE(grid3d_type), INTENT(INOUT)        :: grid
+    TYPE(grid3d_type), INTENT(IN)           :: grid
     TYPE(field3d_type), INTENT(INOUT)       :: field
 
-    TYPE(pupil_type)        :: pupil0 ! equivalent pupil function
-    REAL(KIND=dp)           :: E0, omega, k, f, w0, na, theta_max, f0
-    COMPLEX(KIND=dp)        :: Cprefix
-    REAL(KIND=dp)           :: x, y, z, rho, varphi, varphiRot
-    INTEGER                 :: ix, iy, iz, ibar
-    INTEGER                 :: j, s, c, n, nMax, nbasis
-    CHARACTER(LEN=32)       :: phase_type
-    CHARACTER(LEN=12)       :: polyName ! name of basis function
-    REAL(KIND=dp), DIMENSION(1:2)     :: thetaRot
-    COMPLEX(KIND=dp), DIMENSION(1:2)  :: vJones
+    !--some beam parameters
+    TYPE(pupil_type)  :: pupil0
+    REAL(KIND=dp)     :: E0, omega, k, f, w0, na, theta_max, f0, ldn
+    COMPLEX(KIND=dp)  :: Cf
+    COMPLEX(KIND=dp), DIMENSION(1:3)        :: Ef
 
-    COMPLEX(KIND=dp), ALLOCATABLE, DIMENSION(:)   ::  &
-    intJjS0C0, intJjS0C1, intJjS1C0, intJjS00C01
-    LOGICAL, ALLOCATABLE, DIMENSION(:)            ::  &
-    intJjS0C0_done, intJjS0C1_done, intJjS1C0_done, intJjS00C01_done
-    LOGICAL, ALLOCATABLE, DIMENSION(:)            ::  &
-    intJjS0C0_need, intJjS0C1_need, intJjS1C0_need, intJjS00C01_need
-    COMPLEX(KIND=dp), ALLOCATABLE, DIMENSION(:,:) :: En
-    COMPLEX(KIND=dp), DIMENSION(1:3)              :: Etilde
+    ! spatial and related variables
+    ! (x,y,z) the location where the focal field is to be calculated.
+    ! (rho,varphi,z) the corresponding cylindrical coordinate representation
+    REAL(KIND=dp)     :: x, y, z, rho, varphi
+    INTEGER           :: ix, iy, iz, ido, ndo
 
-    ! determine pupil function based on focused beam type
-    pupil0 = focus2pupil(focus)
-    nMax = pupil0%phase%nMax
-    nbasis = focus%bessel%nbasis
-    polyName = focus%bessel%polyName
-
-    E0 = 1.0_dp ! amplitude of the fundamental mode, hg00
-    omega = 2.0_dp*pi*c0/wl
-    k = REAL(ri2, KIND=dp)*omega/c0
-    f = focus%focal
+    !--initialization
+    f0 = 1.0_dp ! filling factor is set to 1 for all other apertures.
+    E0 = focus%E0
     w0 = focus%waist
     na = focus%na
+    omega = 2.0_dp*pi*c0/wl
+    k = REAL(ri2, KIND=dp)*omega/c0
+    ldn = wl/REAL(ri2, KIND=dp)
     theta_max = ASIN(na/REAL(ri2,KIND=dp))
-    Cprefix = (0,1)*k*f*EXP(-(0,1)*k*f)*(1.0_dp/(2.0_dp*pi))    &
-             *(1.0_dp/2.0_dp)*(SQRT(ri1/ri2))
+    ! f = focus%focal ! !!!focal length is not an independent parameter!!!
+    f = w0*f0/(SIN(theta_max))
+    Cf = -(0,1)*k*f/(2.0_dp*pi)*SQRT(ri1/ri2)
 
-    ALLOCATE( grid%cj(nbasis*2,0:nMax+2,grid%ny,grid%nx,grid%nz), &
-              grid%cjs0c0(nbasis*2,0:nMax+2,grid%ny,grid%nx,grid%nz), &
-              grid%cjs0c1(nbasis*2,0:nMax+2,grid%ny,grid%nx,grid%nz), &
-              grid%cjs1c0(nbasis*2,0:nMax+2,grid%ny,grid%nx,grid%nz) )
+    ! Generate a general and equivalent pupil function for a specific input beam
+    pupil0 = generate_pupil0(focus, theta_max)
 
-    ALLOCATE( intJjS0C0(-(nMax+2):nMax+2), &
-              intJjS0C1(-(nMax+2):nMax+2), &
-              intJjS1C0(-(nMax+2):nMax+1) )
-    ALLOCATE( intJjS0C0_done(-(nMax+2):nMax+2), &
-              intJjS0C1_done(-(nMax+2):nMax+2), &
-              intJjS1C0_done(-(nMax+2):nMax+1) )
-    ALLOCATE( intJjS00C01(-(nMax+2):nMax+2), &
-              intJjS00C01_done(-(nMax+2):nMax+2) )
-    ALLOCATE( En(-nMax:nMax,1:3) )
+    IF (focus%paraxial) THEN
+      DO iz = 1, grid%nz
+        DO ix = 1, grid%nx
+          DO iy = 1, grid%ny
+            x = grid%x(ix)
+            y = grid%y(iy)
+            z = grid%z(iz)
+            rho = SQRT(x**2+y**2)
+            varphi = ATAN2(y,x)
 
-    ! get filling factor, only works for circ aperture type.
-    IF ( pupil0%aperture%type=='circ' ) THEN
-      f0 = REAL(pupil0%aperture%circ%r, KIND=dp)
+            Ef = E0*vecP(rho, varphi, z, pupil0, ldn, f, w0)
+            ! field%ex(iy,ix,iz) = Ef(1)
+            ! field%ey(iy,ix,iz) = Ef(2)
+            field%erho(iy,ix,iz) = Ef(1)
+            field%ephi(iy,ix,iz) = Ef(2)
+            field%ez(iy,ix,iz) = Ef(3)
+
+          END DO! iy=
+        END DO! ix=
+      END DO! iz=
+
     ELSE
-      ! filling factor is set to 1 for all other apertures.
-      !!!! to be extended.
-      f0 = 1.0_dp
+      WRITE(*,*) '    Tightly focal field calculation is running ...'
+      ndo = grid%nz*grid%nx*grid%ny
+      ido = 0;
+      !$OMP PARALLEL DEFAULT(PRIVATE)&
+      !$OMP SHARED(grid, field, E0, Cf, pupil0, k, f, w0, f0, theta_max, ido, ndo)
+      !$OMP DO COLLAPSE(3) SCHEDULE(STATIC)
+      DO iz = 1, grid%nz
+        DO ix = 1, grid%nx
+          DO iy = 1, grid%ny
+            x = grid%x(ix)
+            y = grid%y(iy)
+            z = grid%z(iz)
+            rho = SQRT(x**2+y**2)
+            varphi = ATAN2(y,x)
+
+            Ef = E0*Cf*vecI(rho, varphi, z, pupil0, k, f, w0, f0, theta_max)
+            ! field%ex(iy,ix,iz) = Ef(1)
+            ! field%ey(iy,ix,iz) = Ef(2)
+            field%erho(iy,ix,iz) = Ef(1)
+            field%ephi(iy,ix,iz) = Ef(2)
+            field%ez(iy,ix,iz) = Ef(3)
+
+            ! update the counter only by a single thread at a time
+            !$OMP ATOMIC UPDATE
+            ido = ido + 1
+            !$OMP END ATOMIC
+            ! show progress
+            CALL show_progress(ido, ndo)
+          END DO! iy=
+        END DO! ix=
+      END DO! iz=
+      !$OMP END DO
+      !$OMP END PARALLEL
+      WRITE(*,*) '    Tightly focal field calculation is finished.'
     END IF
 
-    phase_type = TRIM(pupil0%phase%type)
-    thetaRot = pupil0%phase%thetaRot
-    vJones = pupil0%phase%vJones
-    ! loop each point in the 3D grid
-    ibar = 0 ! counter for the progress bar
-    WRITE(*,*) 'Focal field calculation is running ...'
-    DO iz = 1, grid%nz
-      DO ix = 1, grid%nx
-        DO iy = 1, grid%ny
+  END SUBROUTINE focal_field
 
-          x = grid%x(ix)
-          y = grid%y(iy)
-          z = grid%z(iz)
+  ! calculate the vector form of the focal field under paraxial approximation
+  FUNCTION vecP(rho, varphi, z, pupil0, ldn, f, w0)
+    TYPE(pupil_type), INTENT(IN)      :: pupil0
+    REAL(KIND=dp), INTENT(IN)         :: rho, varphi, z, ldn, f, w0
+    COMPLEX(KIND=dp), DIMENSION(1:3)  :: vecP
 
-          rho = SQRT(x**2+y**2)
-          varphi = ATAN2(y,x)
+    REAL(KIND=dp)     :: zR, wz, Rz, gaussian, phig, x, theta
+    COMPLEX(KIND=dp)  :: Gouy
+    INTEGER           :: n, ir, l, nMin, nMax
+    COMPLEX(KIND=dp), DIMENSION(1:3)                :: vecR
+    COMPLEX(KIND=dp), DIMENSION(:,:), ALLOCATABLE   :: vecPhi_cn
 
-          intJjS0C0 = CMPLX(0.0_dp,0.0_dp)
-          intJjS0C1 = CMPLX(0.0_dp,0.0_dp)
-          intJjS1C0 = CMPLX(0.0_dp,0.0_dp)
-          intJjS00C01 = CMPLX(0.0_dp,0.0_dp)
-          En = CMPLX(0.0_dp, 0.0_dp)
-          intJjS0C0_done = .FALSE.
-          intJjS0C1_done = .FALSE.
-          intJjS1C0_done = .FALSE.
-          intJjS00C01_done = .FALSE.
+    nMin = LBOUND(pupil0%Phi(1)%cn,1)
+    nMax = UBOUND(pupil0%Phi(1)%cn,1)
+    ALLOCATE( vecPhi_cn(1:3,nMin:nMax) )
+    vecPhi_cn = CMPLX(0,0, KIND=dp)
+    vecP = CMPLX(0,0, KIND=dp)
 
-          DO n = nMax, -nMax, -1
-            IF ( pupil0%cn(n) == CMPLX(0.0_dp, 0.0_dp) ) THEN
-              CYCLE
-            END IF
+    zR = pi*w0**2/ldn
+    wz = w0*SQRT(1.0_dp+(z/zR)**2)
+    gaussian = EXP(-(rho/wz)**2)
 
-            DO j = n+2, n-2, -2
-              IF ( intJjS0C0_done(j) .EQV. .FALSE. ) THEN
-                IF ( intJjS0C0_done(-j) .EQV. .TRUE. ) THEN
-                  intJjS0C0(j)=(-1)**(-j)*intJjS0C0(-j)
-                ELSE
-                  s=0; c=0;
-                  ! intJjS0C0(j)=IntegralJjSsCc(j, s, c)
-                  CALL IntegralJjSsCc(j, s, c, intJjS0C0(j), grid%cjs0c0(:,j,iy,ix,iz))
-                END IF
-              END IF
+    theta = ASIN(rho/f)
 
-              IF ( intJjS0C1_done(j) .EQV. .FALSE. ) THEN
-                IF ( intJjS0C1_done(-j) .EQV. .TRUE. ) THEN
-                  intJjS0C1(j)=(-1)**(-j)*intJjS0C1(-j)
-                ELSE
-                  s=0; c=1;
-                  ! intJjS0C1(j)=IntegralJjSsCc(j, s, c)
-                  CALL IntegralJjSsCc(j, s, c, intJjS0C1(j), grid%cjs0c1(:,j,iy,ix,iz))
-                END IF
-              END IF
+    !--vecR(theta) and vecPhi_cn, loop for all three field components
+    DO ir = 1, 3
+      vecPhi_cn(ir,nMin:nMax) = pupil0%Phi(ir)%cn
 
-              !IF ( intJjS00C01_done(j) == .FALSE. ) THEN
-              !  IF ( intJjS00C01_done(-j) == .TRUE. ) THEN
-              !    intJjS00C01(j)=(-1)**(-j)*intJjS00C01(-j)
-              !  ELSE
-              !    s1=0; s2=0; c1=0; c2=1
-              !    intJjS00C01(j)=IntegralJjSssCcc(l, s1, s2, c1, c2)
-              !  END IF
-              !END IF
+      SELECT CASE ( TRIM(pupil0%R(ir)%fun) )
+        CASE ('const')
+          vecR(ir) = pupil0%R(ir)%const
 
-              intJjS0C0_done(j) = .TRUE.
-              intJjS0C1_done(j) = .TRUE.
-            END DO
+        CASE ('sin')
+          vecR(ir) = SIN(pupil0%R(ir)%sin%x*theta)**pupil0%R(ir)%sin%y
 
-            DO j = n+1, n-1, -2
-              IF ( intJjS1C0_done(j) .EQV. .FALSE. ) THEN
-                IF ( intJjS1C0_done(-j) .EQV. .TRUE. ) THEN
-                  intJjS1C0(j)=(-1)**(-j)*intJjS1C0(-j)
-                ELSE
-                  s=1; c=0;
-                  !intJjS1C0(j)=IntegralJjSsCc(j, s, c)
-                  CALL IntegralJjSsCc(j, s, c, intJjS1C0(j), grid%cjs1c0(:,j,iy,ix,iz))
-                END IF
-              END IF
+        CASE ('cos')
+          vecR(ir) = COS(pupil0%R(ir)%cos%x*theta)**pupil0%R(ir)%cos%y
 
-              intJjS1C0_done(j) = .TRUE.
-            END DO
+        CASE ('H1')
+          ! f*sin(theta) = rho under paraxial approx.
+          vecR(ir) = (2.0_dp/w0)*rho
 
-            ! calc. field from x-polarized hg00 input beam
-            varphiRot = varphi - thetaRot(1)*deg2rad
+        CASE ('LG')
+          n = pupil0%R(ir)%lg%n
+          l = pupil0%R(ir)%lg%l
 
-            Etilde(1) = 2*EXP((0,1)*n*varphiRot)*(intJjS0C0(n)+intJjS0C1(n))  &
-              +EXP((0,1)*(n+2)*varphiRot)*(intJjS0C0(n+2)-intJjS0C1(n+2))     &
-              +EXP((0,1)*(n-2)*varphiRot)*(intJjS0C0(n-2)-intJjS0C1(n-2))
-            Etilde(2) = (0,1)*( &
-              EXP((0,1)*(n-2)*varphiRot)*(intJjS0C0(n-2)-intJjS0C1(n-2))      &
-              -EXP((0,1)*(n+2)*varphiRot)*(intJjS0C0(n+2)-intJjS0C1(n+2)))
-            Etilde(3) = 2*(0,1)*( EXP((0,1)*(n-1)*varphiRot)*intJjS1C0(n-1)   &
-                                 -EXP((0,1)*(n+1)*varphiRot)*intJjS1C0(n+1) )
-            ! rotate Etilde(1:2) in thetaRot(1) [deg]
-            Etilde = MATMUL( matrix_rz(thetaRot(1)*deg2rad), Etilde )
-            En(n,:) = En(n,:) + pupil0%cn(n)*(0,1)**n*Etilde(:)*vJones(1)
+          x = SQRT(2.0_dp)*rho/wz
+          phig = ATAN(z/zR)
+          Gouy = EXP(-(0,1)*(2.0_dp*n+ABS(l)+1)*phig)
+          Rz = z*(1.0_dp+(zR/z)**2)
 
-            ! calc. field from y-polarized hg00 input beam
-            varphiRot = varphi - pi/2 - thetaRot(2)*deg2rad
+          vecR(ir) = Gouy*SQRT(2.0_dp*factorial_n(n)/(pi*factorial_n(n+ABS(l)))) &
+                    * (1.0_dp/wz) * (x**ABS(l)) * gLaguerrePoly(n, ABS(l), x**2)
 
-            Etilde(1) = 2*EXP((0,1)*n*varphiRot)*(intJjS0C0(n)+intJjS0C1(n))  &
-              +EXP((0,1)*(n+2)*varphiRot)*(intJjS0C0(n+2)-intJjS0C1(n+2))     &
-              +EXP((0,1)*(n-2)*varphiRot)*(intJjS0C0(n-2)-intJjS0C1(n-2))
-            Etilde(2) = (0,1)*( &
-              EXP((0,1)*(n-2)*varphiRot)*(intJjS0C0(n-2)-intJjS0C1(n-2))      &
-              -EXP((0,1)*(n+2)*varphiRot)*(intJjS0C0(n+2)-intJjS0C1(n+2)))
-            Etilde(3) = 2*(0,1)*( EXP((0,1)*(n-1)*varphiRot)*intJjS1C0(n-1)   &
-                                 -EXP((0,1)*(n+1)*varphiRot)*intJjS1C0(n+1) )
+        CASE DEFAULT
+          WRITE(*,*) 'Not supported Radial function type!'
+          STOP
+      END SELECT
 
-            ! rotate pi/2 in order to convert hg00 from x-pol to y-pol
-            Etilde = MATMUL( matrix_rz(pi/2), Etilde )
-            ! rotate Etilde(1:2) in thetaRot(2) [deg]
-            Etilde = MATMUL( matrix_rz(thetaRot(2)*deg2rad), Etilde )
+!      WRITE(*,*) vecPhi_cn(ir, nMin:nMax)*(/(EXP((0,1)*n*varphi),n=nMin, nMax)/)
+!      STOP
+      vecP(ir) = vecR(ir)*SUM(vecPhi_cn(ir, nMin:nMax)*(/(EXP((0,1)*n*varphi),n=nMin, nMax)/))
+    END DO! ir
 
-            En(n,:) = En(n,:) + pupil0%cn(n)*(0,1)**n*Etilde(:)*vJones(2)
-          END DO
+    vecP = vecP*gaussian
 
-          field%ex(iy,ix,iz) = Cprefix*E0*pi*SUM(En(:,1), DIM=1)
-          field%ey(iy,ix,iz) = Cprefix*E0*pi*SUM(En(:,2), DIM=1)
-          field%ez(iy,ix,iz) = Cprefix*E0*pi*SUM(En(:,3), DIM=1)
+  END FUNCTION vecP
 
-          ! show progress
-          CALL show_progress( REAL(iy*ix*iz, KIND=dp)&
-                              /REAL(grid%ny*grid%nx*grid%nz, KIND=dp), ibar)
-        END DO! iy=
-      END DO! ix=
-    END DO! iz=
-    WRITE(*,*) 'Focal field calculation is finished.'
+  ! calculate the vector form of the tightly focal field through the vector
+  ! diffraction theory developed by B. Richards and E. Wolf in 1959
+  FUNCTION vecI(rho, varphi, z, pupil0, k, f, w0, f0, theta_max)
+    TYPE(pupil_type), INTENT(IN)      :: pupil0
+    REAL(KIND=dp), INTENT(IN)         :: rho, varphi, z, k, f, w0, f0, theta_max
+    COMPLEX(KIND=dp), DIMENSION(1:3)  :: vecI
 
-    DEALLOCATE( intJjS0C0, intJjS0C1, intJjS1C0, intJjS00C01, &
-      intJjS0C0_done, intJjS0C1_done, intJjS1C0_done, intJjS00C01_done )
-    DEALLOCATE( En )
+    REAL(KIND=dp)   :: theta1, theta2, maxErr
+    INTEGER         :: maxDepth, nMin, nMax
+
+    ! accuracy control for the Adaptive Simpson's method
+    maxErr = 1.0D-6
+    maxDepth = 50
+
+    nMin = LBOUND(pupil0%Phi(1)%cn,1)
+    nMax = UBOUND(pupil0%Phi(1)%cn,1)
+
+    ! get three field components
+    theta1 = pupil0%R(1)%thetaBounds(1)
+    theta2 = pupil0%R(1)%thetaBounds(2)
+    IF ( theta1 == theta2 ) THEN
+    ! infinitesimal thin ring, no integration
+      vecI(1) = K_r(theta1)
+    ELSE
+      vecI(1) = asqz(K_r, theta1, theta2, maxErr, maxDepth)! adaptive simpson
+    END IF
+
+    theta1 = pupil0%R(2)%thetaBounds(1)
+    theta2 = pupil0%R(2)%thetaBounds(2)
+    IF ( theta1 == theta2 ) THEN
+      vecI(2) = K_phi(theta1)
+    ELSE
+      vecI(2) = asqz(K_phi, theta1, theta2, maxErr, maxDepth)
+    END IF
+
+    theta1 = pupil0%R(3)%thetaBounds(1)
+    theta2 = pupil0%R(3)%thetaBounds(2)
+    IF ( theta1 == theta2 ) THEN
+      vecI(3) = K_z(theta1)
+    ELSE
+      vecI(3) = asqz(K_z, theta1, theta2, maxErr, maxDepth)
+    END IF
 
   CONTAINS
+    !----K_q----, the integrand over theta
+    FUNCTION K_r(theta)
+      REAL(KIND=dp), INTENT(IN)     :: theta
+      COMPLEX(KIND=dp)              :: K_r
 
-    !> The integral is integrated over diverging angle \f$\theta\f$.
-    !> \f[
-    !! I_{JjSmCn} = \int_0^{\theta_{max}} g(\theta)
-    !!          J_j(k\rho sin(\theta)) sin^s(\theta) cos^c(\theta) d\theta,
-    !! \f]
-    !> with \f$g\left(\theta\right) \equiv
-    !! \sqrt{\cos\theta}\sin\theta e^{ikz\cos\theta}f_{w}\left(\theta\right)\f$,
-    !! where \f$f_{w}\left(\theta\right) \equiv
-    !! e^{-\frac{1}{f_{0}^{2}}\frac{\sin^{2}\theta}{\sin^{2}\theta_{\max}}}\f$
-    !! is a common phase factor that is shared by the Gaussian laser modes.
-    !> The meaning of the subscript,
-    !> J: Bessel function of the first kind
-    !> j: Integer order of the first kind Bessel function
-    !> S: Sine function
-    !> s: Power of sine function excluding the common part
-    !> C: Cosine function
-    !> c: Power of cosine function excluding the common part
-    SUBROUTINE IntegralJjSsCc(j, s, c, integ, cj)
-    ! FUNCTION IntegralJjSsCc(j,s,c) RESULT(integ)
-      INTEGER, INTENT(IN)         :: j,s,c
-      COMPLEX(KIND=dp), INTENT(OUT) :: integ
-      COMPLEX(KIND=dp), DIMENSION(:), INTENT(INOUT) :: cj
+      K_r = g(theta) * SUM(matB(theta, (/1/), (/1, 2, 3/)))
+    END FUNCTION K_r
 
-      REAL(KIND=dp)               :: theta_bessel, delta_bessel, &
-                                     theta0, theta1, theta2
-      REAL(KIND=dp)               :: maxerr, krho_tol=1D1, kz_tol=1D0
-      ! REAL(KIND=dp)               :: maxerr, krho_tol=1D3, kz_tol=1D3
-      INTEGER                     :: maxDepth, ierr, n
+    FUNCTION K_phi(theta)
+      REAL(KIND=dp), INTENT(IN)     :: theta
+      COMPLEX(KIND=dp)              :: K_phi
 
-      ! accuracy control for the Adaptive Simpson's method
-      maxerr = 1.0D-9
-      maxDepth = 30
-      ! n = nbasis ! n basis in bessel_transform
-      integ = CMPLX(0.0_dp, 0.0_dp)
-      ! WRITE(*,*) j, s, c
-      theta0 = 0.0_dp
+      K_phi = g(theta) * SUM(matB(theta, (/2/), (/1, 2, 3/)))
+    END FUNCTION K_phi
 
-      IF ( TRIM(phase_type) == 'bessel' ) THEN
-        theta_bessel = pupil0%phase%bessel%theta*deg2rad
-        delta_bessel = pupil0%phase%bessel%delta*deg2rad
-        IF ( delta_bessel == 0.0_dp ) THEN
-          ! infinitesimal thin ring, no integration
-          integ = integrandTheta(theta_bessel)
-        ELSE
-          theta1 = MAX(0.0_dp, theta_bessel-delta_bessel/2.0_dp)
-          theta2 = theta_bessel+delta_bessel/2.0_dp
+    FUNCTION K_z(theta)
+      REAL(KIND=dp), INTENT(IN)     :: theta
+      COMPLEX(KIND=dp)              :: K_z
 
-          integ = asqz(integrandTheta, theta1, theta2, maxerr, maxDepth)
-        END IF
-      ELSE
-        theta1 = 0.0_dp
-        theta2 = theta_max
+      K_z = g(theta) * SUM(matB(theta, (/3/), (/1, 2, 3/)))
+    END FUNCTION K_z
+    !----K_q----
 
-        integ = asqz(integrandTheta, theta1, theta2, maxerr, maxDepth)
-      END IF
-
-      ! WRITE(*,*) x,y,z
-!      WRITE(*,*) '-------------------------------------------------------------'
-!      WRITE(*,*) cyl_bessel_zeros(MAX(0,j-1),1)
-!      WRITE(*,*) '-------------------------------------------------------------'
-!      WRITE(*,*) j, k*rho, k*z, theta0*rad2deg, theta1*rad2deg, theta2*rad2deg
-      ! The 1st method for numerical integration
-      ! CALL zhankel(gx_ht, SIN(theta1), SIN(theta2), j, k*rho, integ, ierr)
-      ! The subroutine zhankel is not working well, as it requires writing
-      ! the integrand function in Fortran 77 in order to use COMMON blocks.
-      ! Could check this method later.
-
-      ! The 2nd method for numerical integration.
-      ! Split into 1 or 2 subintervals for Bessel (or Hankel) transfrom.
-      !IF ( ( k*rho*SIN(theta1) < cyl_bessel_zeros(MAX(0,j-1),1) ) &
-      !    .AND. ( cyl_bessel_zeros(MAX(0,j-1),1) < k*rho*SIN(theta2) ) ) THEN
-      !  theta0 = theta1
-      !  theta1 = ASIN(cyl_bessel_zeros(MAX(0,j-1),1)/(k*rho))
-      !  integ = besselj_transfrom(gx,SIN(theta0),SIN(theta1),j+1,k*z,k*rho,n)
-      !END IF
-      !integ = integ + &
-      !        besselj_transfrom(gx,SIN(theta1),SIN(theta2),j+1,k*z,k*rho,n)
-
-      ! When k*rho and k*z is small, use Simpson's quadrature rule.
-!      IF ( ( k*rho < krho_tol) .AND. ( ABS(k*z) < kz_tol ) ) THEN
-!        integ = asqz(integrandTheta, theta1, theta2, maxerr, maxDepth)
-!      ELSE
-!        ! compare lower bound with the 1st maxima of bessel function
-!        ! IF ( ( k*rho*SIN(theta1) < cyl_bessel_zeros(MAX(0,j-1),1) ) &
-!        !     .AND. ( cyl_bessel_zeros(MAX(0,j-1),1) < k*rho*SIN(theta2) ) ) THEN
-!        !   theta0 = theta1
-!        !   theta1 = ASIN(cyl_bessel_zeros(MAX(0,j-1),1)/(k*rho))
-!        !   integ = besselj_transfrom(gx,SIN(theta0),SIN(theta1),j+1,k*z,k*rho,n)
-!        ! END IF
-!        ! integ = integ + &
-!        !         besselj_transfrom(gx,SIN(theta1),SIN(theta2),j+1,k*z,k*rho,n)
-!        ! integ = besselj_transfrom(gx,SIN(theta1),SIN(theta2),j+1,k*z,k*rho,n)
-!        ! CALL besselj_transfrom_detail( gx, SIN(theta1), SIN(theta2), j+1, &
-!        !                                k*z, k*rho, n, polyName, integ, cj )
-!        ! CALL besselj_transfrom_detail( gx, SIN(theta1), SIN(theta2), j+1, &! debug
-!        !                                0.0_dp, 4.267823982235190_dp, n, polyName, integ, cj )! debug
-!      END IF
-    !END FUNCTION IntegralJjSsCc
-    END SUBROUTINE IntegralJjSsCc
-
-    FUNCTION integrandTheta(theta) RESULT(res)
+    !----g(theta)----, the common part of the function over theta
+    COMPLEX(KIND=dp) FUNCTION g(theta)
       REAL(KIND=dp), INTENT(IN)   :: theta
-      COMPLEX(KIND=dp)            :: res
 
-      res = besselj( j, k*rho*SIN(theta) ) * &
-            g(theta)*(SIN(theta)**s)*(COS(theta)**c)
-    END FUNCTION integrandTheta
-
-    FUNCTION gx(x) RESULT(res)
-      REAL(KIND=dp), INTENT(IN)   :: x ! x = sin(theta)
-      COMPLEX(KIND=dp)            :: res
-
-      ! Host Association: k, z, phase_type, l, w0
-      ! basis: HG00 mode
-      ! res = fx_w(x) * (1-x**2)**((2.0_dp*c-1.0_dp)/4.0_dp) * x**(s+1) &
-      !       * EXP( (0,1)*k*z*(1-x**2)**0.5_dp )
-      res = fx_w(x) * (1-x**2)**((2.0_dp*REAL(c, KIND=dp)-1.0_dp)/4.0_dp) * x**(s+1)
-      ! EXP( (0,1)*k*z*(1-x**2)**0.5_dp ) is considered in bessel_transform
-      ! as the factor in term exp(i*r1*(1-x^2)^0.5)*J_nu(r_2 * x)
-      ! Check bessel_transform for more details.
-
-      ! multiply extra factor for each type of phase
-      IF ( TRIM(phase_type) == 'petal' .OR. &
-           TRIM(phase_type) == 'petal_rect' ) THEN
-        res = res * ((SQRT(2.0_dp)*f0*x/w0)**ABS(j))
-      ELSE IF ( TRIM(phase_type) == 'bessel' ) THEN
-        res = res * x
-      ELSE IF ( TRIM(phase_type) == 'azi' ) THEN
-        res = res * x
-      ELSE IF ( TRIM(phase_type) == 'rad' ) THEN
-        res = res * x
-      ELSE IF ( TRIM(phase_type) == 'hg01' ) THEN
-        res = res * x
-      END IF
-    END FUNCTION gx
-
-    ! Definition for the integrand FUN(X) in the following hankel transform
-    !
-    !                 ( infty
-    ! HT(FUN,NU,XI) = |      (XI * X)**(1/2) JNUX(XI * X) FUN(X) dX
-    !                 ) 0
-    FUNCTION gx_ht(x) RESULT(res)
-      REAL(KIND=dp), INTENT(IN)   :: x! x = sin(theta)
-      COMPLEX(KIND=dp)            :: res
-
-      ! Host Association: k, z, phase_type, l, w0
-      ! basis: HG00 mode
-      WRITE(*,*) rho
-      res = fx_w(x) * (1-x**2)**((2*c+1)/4) &
-            * x**(s+1) * EXP( (0,1)*k*z*SQRT(1-x**2) ) &
-            / (k*rho*x)**(0.5)
-      ! multiply extra factor for each type of phase
-      IF ( TRIM(phase_type) == 'petal' .OR. &
-           TRIM(phase_type) == 'petal_rect' ) THEN
-        res = res * ((SQRT(2.0_dp)*f0*x/w0)**ABS(j))
-      ELSE IF ( TRIM(phase_type) == 'bessel' ) THEN
-        res = res * x
-      ELSE IF ( TRIM(phase_type) == 'hg01' ) THEN
-        res = res * x
-      END IF
-    END FUNCTION gx_ht
-
-    ! inlcude the filling factor
-    FUNCTION fx_w(x) RESULT(res)
-      REAL (KIND=dp), INTENT(IN)  :: x
-      REAL (KIND=dp)              :: res
-
-      ! Host Association: f0, theta_max
-      res = EXP( -( x**2 / (f0**2 * SIN(theta_max)**2) ) )
-    END FUNCTION fx_w
-
-    FUNCTION g(theta) RESULT(res)
-      REAL (KIND=dp), INTENT(IN)  :: theta
-      COMPLEX (KIND=dp)           :: res
-
-      ! Host Association: k, z, phase_type, l, w0
-      ! basis: HG00 mode
-      res = f_w(theta) * SQRT( COS(theta) ) &
-            * SIN(theta) * EXP( (0,1)*k*z*COS(theta) )
-      ! multiply extra factor for each type of phase
-      IF ( TRIM(phase_type) == 'petal' .OR. &
-           TRIM(phase_type) == 'petal_rect' ) THEN
-        res = res * ((SQRT(2.0_dp)*f0*SIN(theta)/w0)**ABS(j))
-      ELSE IF ( TRIM(phase_type) == 'bessel' ) THEN
-        res = res * SIN(theta)
-      ELSE IF ( TRIM(phase_type) == 'azi' ) THEN
-        res = res * SIN(theta)
-      ELSE IF ( TRIM(phase_type) == 'rad' ) THEN
-        res = res *  SIN(theta)
-      ELSE IF ( TRIM(phase_type) == 'hg01' ) THEN
-        res = res * SIN(theta)
-      END IF
+      g = SQRT(COS(theta))*SIN(theta)*fw(theta)*EXP((0,1)*k*z*COS(theta))
     END FUNCTION g
 
-    ! inlcude the filling factor
-    FUNCTION f_w(theta) RESULT(res)
-      REAL (KIND=dp), INTENT(IN)  :: theta
-      REAL (KIND=dp)              :: res
+    ! the filling factor
+    REAL(KIND=dp) FUNCTION fw(theta)
+      REAL(KIND=dp), INTENT(IN)   :: theta
 
-      ! Host Association: f0, theta_max
-      res = EXP( -( SIN(theta)**2 / (f0**2 * SIN(theta_max)**2) ) )
-    END FUNCTION f_w
+      fw = EXP(-(SIN(theta)**2/(f0**2*SIN(theta_max)**2)))
+    END FUNCTION fw
+    !----g(theta)----
 
-  END SUBROUTINE focal_field
+    !----matB(theta, q1, q2)----
+    ! e.g., matB(theta, 2, 1) represents the phi (2nd) focal field component that is
+    ! due to the radial (1st) input field component
+    FUNCTION matB(theta, q1, q2)
+      REAL(KIND=dp), INTENT(IN)             :: theta
+      INTEGER, DIMENSION(:), INTENT(IN)     :: q1, q2
+      COMPLEX(KIND=dp), DIMENSION(1:3,1:3)  :: matB
+
+      COMPLEX(KIND=dp), DIMENSION(1:3,1:3)            :: matJ, matP
+      REAL(KIND=dp), DIMENSION(1:3,1:3)               :: matA
+      REAL(KIND=dp)                                   :: x
+      INTEGER                                         :: n, m, ir, l
+      COMPLEX(KIND=dp), DIMENSION(1:3)                :: vecR
+      COMPLEX(KIND=dp), DIMENSION(1:3,nMin:nMax)      :: vecPhi_cn
+      LOGICAL, DIMENSION(nMin-1:nMax+1)               :: Jn_done
+      COMPLEX(KIND=dp), DIMENSION(nMin-1:nMax+1)      :: Jn
+
+      !--vecR(theta) and vecPhi_cn, loop for all three field components
+      DO ir = 1, 3
+        vecPhi_cn(ir,nMin:nMax) = pupil0%Phi(ir)%cn
+
+        SELECT CASE ( TRIM(pupil0%R(ir)%fun) )
+          CASE ('const')
+            vecR(ir) = pupil0%R(ir)%const
+
+          CASE ('sin')
+            vecR(ir) = SIN(pupil0%R(ir)%sin%x*theta)**pupil0%R(ir)%sin%y
+
+          CASE ('cos')
+            vecR(ir) = COS(pupil0%R(ir)%cos%x*theta)**pupil0%R(ir)%cos%y
+
+          CASE ('H1')
+            vecR(ir) = (2.0_dp*f/w0)*SIN(theta)
+
+          CASE ('LG')
+            n = pupil0%R(ir)%lg%n
+            l = pupil0%R(ir)%lg%l
+            x = SQRT(2.0_dp)*f*SIN(theta)/w0
+            vecR(ir) = SQRT(2.0_dp*factorial_n(n)/(pi*factorial_n(n+ABS(l)))) &
+                      * (1.0_dp/w0) * (x**ABS(l)) * gLaguerrePoly(n, ABS(l), x**2)
+
+          CASE DEFAULT
+            WRITE(*,*) 'Not supported Radial function type!'
+            STOP
+        END SELECT
+      END DO! ir
+
+      !--A(theta): matrix representation for the aplanatic system
+      matA = RESHAPE( (/COS(theta),   0.0_dp,   SIN(theta), &
+                        0.0_dp,       1.0_dp,   0.0_dp,     &
+                        -SIN(theta),  0.0_dp,   COS(theta)/),(/3,3/))
+
+      matB = CMPLX(0,0,KIND=dp)
+      matP = CMPLX(0,0,KIND=dp)
+
+      !--Jn(k*rho*SIN(theta))
+      Jn_done = .FALSE.
+      Jn = CMPLX(0,0,KIND=dp)
+      DO n = nMax, nMin, -1
+        ! skip insignificant contributions
+!        IF (  ALL((/vecPhi_cn(1,n)==CMPLX(0,0,KIND=dp),  &
+!                    vecPhi_cn(2,n)==CMPLX(0,0,KIND=dp),  &
+!                    vecPhi_cn(3,n)==CMPLX(0,0,KIND=dp)/)) ) THEN
+        IF (  ALL((/ABS(vecPhi_cn(1,n)) .LT. epsilon_dp,  &
+                    ABS(vecPhi_cn(2,n)) .LT. epsilon_dp,  &
+                    ABS(vecPhi_cn(3,n)) .LT. epsilon_dp/)) ) THEN
+          CYCLE
+        END IF
+
+        ! The Bessel function J_(n-1) and J_(n+1) are needed as well.
+        DO m = n+1, n-1, -1
+          ! Whether or not the Bessel function Jn(m) or Jn(-m) has been calculated.
+          ! While inquiring Jn(-m), don't forget about legal the array bounds.
+          IF ( Jn_done(m) .EQV. .FALSE. ) THEN
+            IF ( (Jn_done(-m) .EQV. .TRUE.) .AND. &
+                  ( (-m .GT. nMin) .AND. (-m .LT. nMax) ) ) THEN
+              Jn(m)=(-1)**(-m)*Jn(-m)
+            ELSE
+              ! new calculation for the Bessel function
+              Jn(m) = besselj( m, k*rho*SIN(theta) )
+            END IF
+          END IF
+          ! mark the Bessel function of mth-order Jn(m) as calculated
+          Jn_done(m) = .TRUE.
+        END DO! m
+
+        !--when \vec{k} \vec{r} =kzcos(theta)-k\rho sin(theta)cos(\phi-\varphi)
+        matJ = pi*(-(0,1)*EXP((0,1)*varphi))**n * RESHAPE( &
+          (/(0,1)*(Jn(n-1)-Jn(n+1)), -(Jn(n-1)+Jn(n+1)),  CMPLX(0,0,KIND=dp), &
+            (Jn(n-1)+Jn(n+1)),  (0,1)*(Jn(n-1)-Jn(n+1)),  CMPLX(0,0,KIND=dp), &
+            CMPLX(0,0,KIND=dp),      CMPLX(0,0,KIND=dp),  2*Jn(n)/), (/3,3/) )
+
+        !--when \vec{k} \vec{r} =kzcos(theta)+k\rho sin(theta)cos(\phi-\varphi)
+!        matJ = pi*((0,1)*EXP((0,1)*varphi))**n * RESHAPE( &
+!          (/-(0,1)*(Jn(n-1)-Jn(n+1)),  (Jn(n-1)+Jn(n+1)), CMPLX(0,0,KIND=dp), &
+!            -(Jn(n-1)+Jn(n+1)), -(0,1)*(Jn(n-1)-Jn(n+1)), CMPLX(0,0,KIND=dp), &
+!            CMPLX(0,0,KIND=dp),      CMPLX(0,0,KIND=dp),  2*Jn(n)/), (/3,3/) )
+
+        matP(1,q2) = vecR(q2)*vecPhi_cn(q2,n)
+        matP(2,q2) = matP(1,q2)
+        matP(3,q2) = matP(1,q2)
+
+        matB(q1,q2) = matB(q1,q2) + MATMUL( matJ(q1,:), matA(:,q2)*matP(:,q2) )
+      END DO! n
+
+    END FUNCTION matB
+    !----matB(theta)----
+
+  END FUNCTION vecI
 
 END MODULE focal

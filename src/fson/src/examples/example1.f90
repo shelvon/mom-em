@@ -71,5 +71,5 @@ program example1
 
     ! clean up
     call fson_destroy(json_data)
-
+    stop
 end program example1

@@ -7,7 +7,6 @@
 MODULE common
   USE data
   USE source
-  USE pupil
   USE focal
   USE greenprd
   USE nlsurf

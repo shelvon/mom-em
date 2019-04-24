@@ -1,5 +1,6 @@
 ! MODULE: aux
 ! AUTHOR: Jouni Makitalo
+! Modified: Xiaorun (Shelvon) ZANG
 ! DESCRIPTION:
 ! Auxiliary routines for various purposes, such as string manipulation, file access and simple
 ! mathematical tools. This module is a good candidate for refactorization in the future.
@@ -309,7 +310,7 @@ CONTAINS
         IF ( k == 1 ) THEN
           res(k) = 0.0_dp
         ELSE
-          res(k) = ( t*polyLegendre(k-1, t)  -polyLegendre(k-2, t) )  &
+          res(k) = ( t*LegendrePoly(k-1, t)  -LegendrePoly(k-2, t) )  &
                    * REAL(k-1)/(t**2-1) * h/2.0_dp
         END IF
       ELSE IF ( TRIM(polyName) == 'cancelA1/x' ) THEN
@@ -346,7 +347,7 @@ CONTAINS
         res(k) = (x-d)**(k-1)
       ELSE IF ( TRIM(polyName) == 'Legendre' ) THEN
         ! 2. Legendre polynomials
-        res(k) = polyLegendre(k-1, t)
+        res(k) = LegendrePoly(k-1, t)
       ELSE IF ( TRIM(polyName) == 'cancelA1/x' ) THEN
         ! 3. Polynomials to cancel 1/x in A
         res(k) = (x)**(k)
@@ -360,7 +361,27 @@ CONTAINS
     END DO
   END FUNCTION ub
 
-  FUNCTION polyLegendre(n, x) RESULT(res)
+  FUNCTION gLaguerrePoly(n, l, x) RESULT(res)
+    INTEGER, INTENT(IN)       :: n, l
+    REAL(KIND=dp), INTENT(IN) :: x
+    REAL(KIND=dp)             :: res
+
+    INTEGER :: k
+
+    res = 0.0_dp
+    IF ( n>=0 ) THEN
+      DO k = 0, n
+        res = factorial_n(n+l)/(factorial_n(k)*factorial_n(n-k)*factorial_n(k+l)) &
+              *((-1.0_dp)**k)*(x**k) + res
+      END DO
+    ELSE
+      WRITE(*,*) 'n must not be negative in gLaguerrePoly(n,l,x)!'
+      STOP
+    END IF
+
+  END FUNCTION gLaguerrePoly
+
+  FUNCTION LegendrePoly(n, x) RESULT(res)
     INTEGER, INTENT(IN)       :: n
     REAL(KIND=dp), INTENT(IN) :: x
     REAL(KIND=dp)             :: res
@@ -375,11 +396,11 @@ CONTAINS
       END DO
       res = res/(2.0_dp**n)
     ELSE
-      WRITE(*,*) 'n must not be negative in polyLegendre(n,x)!'
+      WRITE(*,*) 'n must not be negative in LegendrePoly(n,x)!'
       STOP
     END IF
 
-  END FUNCTION polyLegendre
+  END FUNCTION LegendrePoly
 
 !  FUNCTION PolyLagrange(n, x) RESULT(res)
 !    INTEGER, INTENT(IN)       :: n
