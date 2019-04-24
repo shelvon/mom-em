@@ -1,113 +1,144 @@
 cmake_minimum_required (VERSION 2.6)
 project (mom-em)
-enable_language (Fortran)
+enable_language(Fortran)
 
 set(EXECUTABLE_OUTPUT_PATH "${PROJECT_SOURCE_DIR}/../bin/")
 
-######## run system check ########
-message("################################")
-# check if the environment variable ${MKLROOT} is defined or not
-	#message("$ENV{MKLROOT}")
+#---- check system environment variables ----
+message("---- Checking system environment variables")
+message("---- -- $ENV{FC} --version: ${CMAKE_Fortran_COMPILER_VERSION}")# only detected by cmake3 on Linux
+message("---- -- Host system: ${CMAKE_HOST_SYSTEM_NAME}")
+cmake_host_system_information(RESULT HOST_NAME QUERY HOSTNAME)
+message("---- -- Host name: ${HOST_NAME}")
+
+#---- run libraries check ----
+message("---- Checking installed libraries")
+# check MKL root folder
 if(DEFINED ENV{MKLROOT})
 	# set bash environment variable to CMAKE variable
 	set(MKLROOT "$ENV{MKLROOT}")
-	message(">> The intel mkl root folder: \n ${MKLROOT}")
+	message("---- -- The intel mkl root folder: ${MKLROOT}")
 else()
-	message(">> Please set MKLROOT first!")
+	message("---- -- The MKLROOT is not set, use default folder!")
+	set(MKLROOT "/opt/intel/mkl")
 endif()
 
-# check HDF5 environment variables
-if(DEFINED ENV{HDF5_DIR})
-	set(HDF5_DIR "$ENV{HDF5_DIR}")
-	message(">> The hdf5 root folder: \n ${HDF5_DIR}")
+# check HDF5 root folder
+if(DEFINED ENV{HDF5_ROOT})
+	set(HDF5_ROOT "$ENV{HDF5_ROOT}")
+	message("---- -- The hdf5 root folder: ${HDF5_ROOT}")
 else()
-    message(">> Please set HDF5_DIR first!")
+    message("---- -- The HDF5_ROOT is not set, use default folder!")
+    set(HDF5_ROOT "/opt/local")
+    message("---- -- The hdf5 root folder: ${HDF5_ROOT}")
 endif()
 
-######## check system variables ########
-message("################################")
-message(">> Fortran compiler: $ENV{FC}")
-message(">> $ENV{FC} version: ${CMAKE_Fortran_COMPILER_VERSION}")
-message(">> Host system: ${CMAKE_HOST_SYSTEM_NAME}")
-cmake_host_system_information(RESULT HOST_NAME QUERY HOSTNAME)
-message(">> Host name: ${HOST_NAME}")
-message("################################")
+#---- set flags for building and linking
+if(CMAKE_Fortran_COMPILER_ID MATCHES "GNU")
+	set(FCFLAGS " -cpp -m64")# "-pipe" speed up compiling time in gcc
+	set(FCFLAGS_Release " -fopenmp -O3 -ffree-line-length-0")
+	
+	#set(FCFLAGS_Debug " -g -Wall -Wextra -Warray-temporaries -Wconversion \
+	#	-ffpe-trap=zero,overflow,underflow -finit-real=nan -fbacktrace \
+	#	-fcheck=all -fopenmp -ffree-line-length-0")
+	
+	# Be careful with -fcheck=all, it may emit run-time errors as the option ‘pointer’
+	# enable generation of run-time checks for pointers and allocatables and make
+	# the debugging impossible.
+	set(FCFLAGS_Debug " -g -fopenmp -O0 -Wall -Wno-unused-dummy-argument -fbounds-check -fbacktrace -ffree-line-length-0")
 
-if( (CMAKE_Fortran_COMPILER MATCHES "ifort") OR (CMAKE_Fortran_COMPILER MATCHES "h5fc") )
-	set(fortranFlagsRelease "-fpp -qopenmp -parallel -O2 -heap-arrays -I${MKLROOT}/include -I${HDF5_DIR}/include")
-	#	set(fortranFlagsDebug "-g -debug full -heap-arrays -warn all -traceback -check all -warn all -I${MKLROOT}/include")
-	# set(fortranFlagsDebug "-g -fpp -debug full -heap-arrays -check all -assume none -traceback -I${MKLROOT}/include -I${HDF5_DIR}/include")
-	set(fortranFlagsDebug "-g -fpp -debug full -heap-arrays -traceback -I${MKLROOT}/include -I${HDF5_DIR}/include")# assume none causes error for hdf5 compilation
-	if(CMAKE_SYSTEM_NAME MATCHES "Linux")
-		# linker on Linux
-		message("## set the linker for Linux platform")
-		set(exeLinkerFlags "-L${MKLROOT}/lib/intel64 -lmkl_intel_lp64 -lmkl_intel_thread -lmkl_core -liomp5 -lpthread -L${HDF5_DIR}/lib -Wl,-rpath -Wl,${HDF5_DIR}/lib -lhdf5hl_fortran -lhdf5_hl -lhdf5_fortran -lhdf5 -lz -ldl -lm")
-		# set(exeLinkerFlags "-L${MKLROOT}/lib/intel64 -lmkl_intel_lp64 -lmkl_intel_thread -lmkl_core -liomp5 -lpthread -L${HDF5_DIR}/lib ${HDF5_DIR}/lib/libhdf5hl_fortran.a -lhdf5hl_fortran ${HDF5_DIR}/lib/libhdf5_hl.a -lhdf5_hl ${HDF5_DIR}/lib/libhdf5_fortran.a -lhdf5_fortran ${HDF5_DIR}/lib/libhdf5.a -lhdf5 -lz -ldl -lm")
-	elseif(CMAKE_SYSTEM_NAME MATCHES "Darwin")	
-		# linker on macOS
-		message("## set the linker for macOS platform")
-		set(exeLinkerFlags "-L${MKLROOT}/lib -Wl,-rpath,${MKLROOT}/lib -Wl,-rpath,${MKLROOT}/../compiler/lib/ -lmkl_intel_lp64 -lmkl_intel_thread -lmkl_core -liomp5 -lpthread -L${HDF5_DIR}/lib -lhdf5hl_fortran -lhdf5_hl -lhdf5_fortran -lhdf5 -lz -ldl -lm")
-		# set(exeLinkerFlags "-L${MKLROOT}/lib -Wl,-rpath,${MKLROOT}/lib -Wl,-rpath,${MKLROOT}/../compiler/lib/ -lmkl_intel_lp64 -lmkl_intel_thread -lmkl_core -liomp5 -lpthread -L${HDF5_DIR}/lib ${HDF5_DIR}/lib/libhdf5hl_fortran.a -lhdf5hl_fortran ${HDF5_DIR}/lib/libhdf5_hl.a -lhdf5_hl ${HDF5_DIR}/lib/libhdf5_fortran.a -lhdf5_fortran ${HDF5_DIR}/lib/libhdf5.a -lhdf5 -lz -ldl -lm")
-		# set(exeLinkerFlags "-L${MKLROOT}/lib -Wl,-rpath,${MKLROOT}/lib -Wl,-rpath,${MKLROOT}/../compiler/lib/ -lmkl_intel_lp64 -lmkl_intel_thread -lmkl_core -liomp5 -lpthread -L${HDF5_DIR}/lib ${HDF5_DIR}/lib/libhdf5hl_fortran.a ${HDF5_DIR}/lib/libhdf5_hl.a ${HDF5_DIR}/lib/libhdf5_fortran.a ${HDF5_DIR}/lib/libhdf5.a -lhdf5 -lz -ldl -lm")
+elseif(CMAKE_Fortran_COMPILER_ID MATCHES "Intel")
+	set(FCFLAGS " -fpp -heap-arrays")
+	set(FCFLAGS_Release " -fpp -qopenmp -parallel -O2")
+	
+	#set(FCFLAGS_Debug " -g -debug full -warn all -traceback -check all")
+	set(FCFLAGS_Debug " -g -debug full -traceback -check all")
+else()
+	message("---- Unsupported fortran compiler!")
+endif()
+
+#message("${CMAKE_HOST_SYSTEM_VERSION}")
+#return()
+if(CMAKE_SYSTEM_NAME MATCHES "Linux")
+	if(CMAKE_Fortran_COMPILER_ID MATCHES "GNU")
+		set(HDF5_include "lib64/gfortran/modules")
+    #set(LDFLAGS_MKL " -lmkl_gf_lp64 -lmkl_intel_thread -lmkl_core -liomp5 -lpthread")
+    #set(LDFLAGS_MKL " -lmkl_gf_lp64 -lmkl_gnu_thread -lmkl_core -lgomp -lpthread")
+    set(LDFLAGS_MKL " -lmkl_gf_lp64 -lmkl_gnu_thread -lmkl_core -liomp5 -lpthread")
 	endif()
 	
-	message("################################")
-	if(${HOST_NAME} MATCHES "paimenharakka")
-	 	message(">>>> $ENV{FC} version is 17")
-		set(BUILD_TYPE "debug")
-		# set(BUILD_TYPE "release")
-	elseif(${HOST_NAME} MATCHES "shelvon.local")
-	# elseif(${HOST_NAME} MATCHES "bogon") # hostname@tianjin
-	 	message(">>>> $ENV{FC} version is 17")
-		set(BUILD_TYPE "debug")
-	else()
-	 	message(">> $ENV{FC} version is lower than 17")
-	 	message(">>>> on cluster, set BUILD_TYPE to release")
-	 	message(">>>> modify release and linker flags for ifort 13")
-		set(BUILD_TYPE "debug")	
-		#set(fortranFlagsRelease "-fpp -openmp -mkl=parallel -O2")
-		#set(exeLinkerFlags "-liomp5 -lpthread -lm -ldl")
-	endif()
+	set(libdir_MKL " -Wl,--no-as-needed -L${MKLROOT}/lib/intel64 -L${MKLROOT}/../compiler/lib/intel64")
 	
-elseif(CMAKE_Fortran_COMPILER MATCHES "gfortran")
-	message("## gnu fortran compiler")
-	set(fortranFlagsRelease "-cpp -fopenmp  -std=gnu -ffree-line-length-0 -DMKL_ILP64 -m64 -I${MKLROOT}/include -O3")
-	set(fortranFlagsDebug "-g -cpp -ggdb -std=gnu -DMKL_LP64 -m64 -I${MKLROOT}/include -Wall -Wextra -Warray-temporaries -Wconversion -ffpe-trap=zero,overflow,underflow -finit-real=nan -fbacktrace -fcheck=all -fopenmp -ffree-line-length-0")
-	set(exeLinkerFlags "-L${MKLROOT}/lib -Wl,-rpath,${MKLROOT}/lib -Wl,-rpath,${MKLROOT}/../compiler/lib/ -lmkl_intel_lp64 -lmkl_intel_thread -lmkl_core -liomp5 -lpthread -lm -ldl")
-	# set(exeLinkerFlags "-L${MKLROOT}/lib -Wl,-rpath,${MKLROOT}/lib -Wl,-rpath,${MKLROOT}/../compiler/lib/ -lmkl_intel_lp64 -lmkl_sequential -lmkl_core -lpthread -lm -ldl")
+	set(libdir_HDF5 " -L${HDF5_ROOT}/lib")
+	set(LDFLAGS_HDF5 " -Wl,-z,relro -lhdf5hl_fortran -lhdf5_hl -lhdf5_fortran -lhdf5 -lsz -lz")
 
+	# modification in deepin or ubuntu 
+	# if(CMAKE_HOST_SYSTEM_VERSION MATCHES "deepin")
+		set(HDF5_include "include/hdf5/serial")
+		set(libdir_HDF5 " -L${HDF5_ROOT}/lib/x86_64-linux-gnu/hdf5/serial -Wl,-rpath -Wl,/usr/lib/x86_64-linux-gnu/hdf5/serial")
+	# endif()
+elseif(CMAKE_SYSTEM_NAME MATCHES "Darwin")
+	set(HDF5_include "include")
+
+	# "-L${MKLROOT}/lib": set path to mkl libraries, followed by
+	# "-Wl,-rpath,${MKLROOT}/lib" which is a special linker option on macOS.
+	# "-L${MKLROOT}/../compiler/lib" set path to other intel libraries, e.g. libiomp5 (intel openmp)
+	# "-Wl,-rpath,${MKLROOT}/../compiler/lib" is again the extra linker command on macOS.
+	set(libdir_MKL " -L${MKLROOT}/lib -Wl,-rpath,${MKLROOT}/lib -L${MKLROOT}/../compiler/lib -Wl,-rpath,${MKLROOT}/../compiler/lib")
+	
+	#set(LDFLAGS_MKL " -lmkl")
+	set(LDFLAGS_MKL " -lmkl_intel_lp64 -lmkl_intel_thread -lmkl_core -liomp5 -lpthread")
+	#If libiomp5 doesn't work, use libgomp instead and then uncomment the following line
+	#set(LDFLAGS_MKL " -lmkl_intel_lp64 -lmkl_intel_thread -lmkl_core -lgomp -lpthread")
+	
+	set(libdir_HDF5 " -L${HDF5_ROOT}/lib -Wl,-rpath,${HDF5_ROOT}/lib")
+	set(LDFLAGS_HDF5 " -lhdf5hl_fortran -lhdf5_hl -lhdf5_fortran -lhdf5 -lsz -lz")
+endif()
+
+set(FCFLAGS_MKL " -I${MKLROOT}/include")
+set(FCFLAGS_HDF5 " -I${HDF5_ROOT}/${HDF5_include} -D_USE_HDF5")
+message("--------------------------------")
+set(BUILD_TYPE "release")
+# set to debug mode, if not on cluster
+if(NOT (${HOST_NAME} MATCHES "narvi") )
 	set(BUILD_TYPE "debug")
-else()
-	message("## Unsupported fortran compiler!")
 endif()
 
 if(BUILD_TYPE MATCHES "release")
- message("Building release")
+ message("---- Building release")
 
  # Support OpenMP.
  # May want to add also "-vec-report1" to get vectorization reports.
- set(CMAKE_Fortran_FLAGS "${fortranFlagsRelease}")
+ set(CMAKE_Fortran_FLAGS "${FCFLAGS_Release} ${FCFLAGS} ${FCFLAGS_MKL} ${FCFLAGS_HDF5}")
 elseif(BUILD_TYPE MATCHES "debug")
- message("Building debug")
+ message("---- Building debug")
 
- set(CMAKE_Fortran_FLAGS "${fortranFlagsDebug}")
+ set(CMAKE_Fortran_FLAGS "${FCFLAGS_Debug} ${FCFLAGS} ${FCFLAGS_MKL} ${FCFLAGS_HDF5}")
+# set(CMAKE_Fortran_FLAGS " -g -cpp -m64 -fopenmp -O0 -Wall")# for test
 elseif(BUILD_TYPE MATCHES "profile")
- message("Building profile")
+ message("---- Building profile")
 
- set(CMAKE_Fortran_FLAGS "-pg")
+ set(CMAKE_Fortran_FLAGS "-pg ${FCFLAGS} ${FCFLAGS_MKL} ${FCFLAGS_HDF5}")
 else()
 	message(FATAL_ERROR "Invalid build type!")
 endif()
 
-set(CMAKE_EXE_LINKER_FLAGS "${exeLinkerFlags}")
+set(CMAKE_EXE_LINKER_FLAGS "${libdir_MKL} ${LDFLAGS_MKL} ${libdir_HDF5} ${LDFLAGS_HDF5} -lm -ldl")
+#set(CMAKE_EXE_LINKER_FLAGS " -ldl -lm")# for test
+
+message("compile flags: ${CMAKE_Fortran_FLAGS}")
+message("linker flags: ${CMAKE_EXE_LINKER_FLAGS}")
+# return()
+# file(GLOB_RECURSE sources  *.f90 *.f)
+# add_executable(mom ${sources})
 
 add_executable(mom
 toms644/zbsubs.f
 toms644/machcon.f90
-fson/fson.f90
-fson/fson_path_m.f90
-fson/fson_string_m.f90
-fson/fson_value_m.f90
+fson/src/fson.f90
+fson/src/fson_path_m.f90
+fson/src/fson_string_m.f90
+fson/src/fson_value_m.f90
 aux.f90
 bc.f90
 bessel.f90
@@ -126,7 +157,6 @@ intbase.f90
 interface.f90
 io.f90
 linalg.f90
-main.f90
 material.f90
 mesh.f90
 modes.f90
@@ -134,12 +164,12 @@ nfields.f90
 nfpost.f90
 nlbulk.f90
 nlsurf.f90
-pec.f90
+#pec.f90
 pupil.f90
 quad.f90
 rwgf.f90
-solver_vie.f90
 solver.f90
+solver_vie.f90
 source.f90
 srcint.f90
 strat.f90
@@ -147,4 +177,19 @@ symmetry.f90
 sysmat.f90
 time.f90
 vie.f90
+main.f90
 )
+
+#	#----doxygen generation
+#	#message("${CMAKE_CURRENT_SOURCE_DIR}")
+#	#message("${PROJECT_SOURCE_DIR}")
+#	#message("${CMAKE_CURRENT_BINARY_DIR}")
+#	#set(doxyfile_in ${CMAKE_CURRENT_SOURCE_DIR}/doxygen.in)
+#	set(doxyfile ${CMAKE_CURRENT_BINARY_DIR}/../doxygen.conf)
+#	#configure_file(${CMAKE_CURRENT_BINARY_DIR}/doxygen.conf @ONLY)
+#	add_custom_target(doc-doxygen
+#	COMMAND ${DOXYGEN_EXECUTABLE} ${doxyfile}
+#	WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+#	COMMENT "Generating html documentation with Doxygen" VERBATIM
+#	)
+#	install(DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}/html DESTINATION ../doc-doxygen)

@@ -75,13 +75,13 @@ CONTAINS
               Sigma(1:nbasis*2,1:nbasis*2), invSigma(1:nbasis*2,1:nbasis*2) )
 
     ! initialization
-    B(:,:,:) = CMPLX(0.0_dp, 0.0_dp)
-    invB(:,:,:) = CMPLX(0.0_dp, 0.0_dp)
-    C1(:,:) = CMPLX(0.0_dp, 0.0_dp)
-    C2(:,:) = CMPLX(0.0_dp, 0.0_dp)
-    C3(:,:) = CMPLX(0.0_dp, 0.0_dp)
-    U(:,:) = CMPLX(0.0_dp, 0.0_dp)
-    VH(:,:) = CMPLX(0.0_dp, 0.0_dp)
+    B(:,:,:) = CMPLX(0,0,KIND=dp)
+    invB(:,:,:) = CMPLX(0,0,KIND=dp)
+    C1(:,:) = CMPLX(0,0,KIND=dp)
+    C2(:,:) = CMPLX(0,0,KIND=dp)
+    C3(:,:) = CMPLX(0,0,KIND=dp)
+    U(:,:) = CMPLX(0,0,KIND=dp)
+    VH(:,:) = CMPLX(0,0,KIND=dp)
     Sigma(:,:) = 0.0_dp
     invSigma(:,:) = 0.0_dp
 
@@ -209,10 +209,10 @@ CONTAINS
               eigvec(1:nbasis*2,1:nbasis*2) )
 
     ! initialization
-    A(:,:) = CMPLX(0.0_dp, 0.0_dp)
-    Aadj(:,:) = CMPLX(0.0_dp, 0.0_dp)
-    eigval(:) = CMPLX(0.0_dp, 0.0_dp)
-    eigvec(:,:) = CMPLX(0.0_dp, 0.0_dp)
+    A(:,:) = CMPLX(0,0,KIND=dp)
+    Aadj(:,:) = CMPLX(0,0,KIND=dp)
+    eigval(:) = CMPLX(0,0,KIND=dp)
+    eigvec(:,:) = CMPLX(0,0,KIND=dp)
 
     WRITE(*,*) 'Building matrices ...'
     WRITE(*,*) 'Triangle quadrature: ', TRIM(domain(-1)%quad(2)%qd%description)
@@ -284,22 +284,22 @@ CONTAINS
     TYPE(medium_prop) :: mprop
 
     ! Check that necessary input data exists.
-    IF(ALLOCATED(b%sols)==.FALSE.) THEN
+    IF(ALLOCATED(b%sols) .EQV. .FALSE.) THEN
        WRITE(*,*) 'Setup wavelengths prior to solving!'
        RETURN
     END IF
 
-    IF(ALLOCATED(b%mesh%nodes)==.FALSE.) THEN
+    IF(ALLOCATED(b%mesh%nodes) .EQV. .FALSE.) THEN
        WRITE(*,*) 'Load mesh prior to solving!'
        RETURN
     END IF
 
-!    IF(ALLOCATED(b%domains)==.FALSE.) THEN
+!    IF(ALLOCATED(b%domains) .EQV. .FALSE.) THEN
 !       WRITE(*,*) 'Set up domains prior to solving!'
 !       RETURN
 !    END IF
 
-    IF(ALLOCATED(b%media)==.FALSE.) THEN
+    IF(ALLOCATED(b%media) .EQV. .FALSE.) THEN
        WRITE(*,*) 'Set up media prior to solving!'
        RETURN
     END IF
@@ -331,18 +331,18 @@ CONTAINS
        wl = b%sols(n)%wl
 
        ! initialize in each loop
-       A(:,:) = CMPLX(0.0_dp, 0.0_dp)
-       Aadj(:,:) = CMPLX(0.0_dp, 0.0_dp)
-       eigval(:) = CMPLX(0.0_dp, 0.0_dp)
-       eigvec(:,:) = CMPLX(0.0_dp, 0.0_dp)
+       A(:,:) = CMPLX(0,0,KIND=dp)
+       Aadj(:,:) = CMPLX(0,0,KIND=dp)
+       eigval(:) = CMPLX(0,0,KIND=dp)
+       eigvec(:,:) = CMPLX(0,0,KIND=dp)
 
        ! Allocate memory for eigenvectors, group representation is not used
        ALLOCATE(b%sols(n)%eigval(1:neig))
        ALLOCATE(b%sols(n)%eigvec(1:nbasis*2,1:neig))
        ALLOCATE(b%sols(n)%x(1:nbasis*2,1,1:neig))
-       b%sols(n)%eigval(1:neig) = CMPLX(0.0_dp, 0.0_dp)
-       b%sols(n)%eigvec(1:nbasis*2,1:neig) = CMPLX(0.0_dp, 0.0_dp)
-       b%sols(n)%x(1:nbasis*2,1,1:neig) = CMPLX(0.0_dp, 0.0_dp)
+       b%sols(n)%eigval(1:neig) = CMPLX(0,0,KIND=dp)
+       b%sols(n)%eigvec(1:nbasis*2,1:neig) = CMPLX(0,0,KIND=dp)
+       b%sols(n)%x(1:nbasis*2,1,1:neig) = CMPLX(0,0,KIND=dp)
 
        ! Print some information.
        WRITE(*,'(A,F6.1,A,I0,A,I0,A)') ' Wavelength: ', wl*1d9, ' nm (', n, ' of ', b%nwl, ')'

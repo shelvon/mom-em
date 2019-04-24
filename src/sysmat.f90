@@ -56,7 +56,7 @@ CONTAINS
 
        ! Loop through group actions.
        DO ns=1,SIZE(b%ga)
-          IF(admissible_ga(b%domains(nd)%mesh, b%ga(ns), nd==1)==.FALSE.) THEN
+          IF(admissible_ga(b%domains(nd)%mesh, b%ga(ns), nd==1) .EQV. .FALSE.) THEN
              CYCLE
           END IF
 
@@ -163,7 +163,7 @@ CONTAINS
 
        ! Loop through actions.
        DO ns=1,SIZE(b%ga)
-          IF(admissible_ga(b%domains(nd)%mesh, b%ga(ns), nd==1)==.FALSE.) THEN
+          IF(admissible_ga(b%domains(nd)%mesh, b%ga(ns), nd==1) .EQV. .FALSE.) THEN
              CYCLE
           END IF
 
@@ -677,7 +677,7 @@ CONTAINS
 
     nweights = qd%num_nodes
 
-    nxD(:,:) = CMPLX(0.0_dp,0.0_dp)
+    nxD(:,:) = CMPLX(0,0,KIND=dp)
     k = ri*omega/c0
     eps = (ri**2)*eps0
     mu = mu0
@@ -781,7 +781,7 @@ CONTAINS
          0.360761573048139_dp, 0.360761573048139_dp,&
          0.171324492379170_dp, 0.171324492379170_dp/)
 
-    nxHline(:,:) = CMPLX(0.0_dp,0.0_dp)
+    nxHline(:,:) = CMPLX(0,0,KIND=dp)
     k = ri*omega/c0
     eps = (ri**2)*eps0
     mu = mu0
@@ -893,7 +893,7 @@ CONTAINS
 
     nweights = qd%num_nodes
 
-    nxK(:,:) = CMPLX(0.0_dp,0.0_dp)
+    nxK(:,:) = CMPLX(0,0,KIND=dp)
     k = ri*omega/c0
 
     DO m=1,mesh%nfaces
@@ -1006,9 +1006,9 @@ CONTAINS
 
     nweights = qd%num_nodes
 
-    nxD(:,:) = CMPLX(0.0_dp,0.0_dp)
-    nxHline(:,:) = CMPLX(0.0_dp,0.0_dp)
-    nxK(:,:) = CMPLX(0.0_dp,0.0_dp)
+    nxD(:,:) = CMPLX(0,0,KIND=dp)
+    nxHline(:,:) = CMPLX(0,0,KIND=dp)
+    nxK(:,:) = CMPLX(0,0,KIND=dp)
     k = ri*omega/c0
     eps = (ri**2)*eps0
     mu = mu0

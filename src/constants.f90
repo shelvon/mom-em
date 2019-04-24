@@ -19,13 +19,14 @@ MODULE constants
 
   REAL(KIND=dp), PARAMETER ::       &
     tol = 1.0E-12_dp,               &
-    pi = 3.141592653589E0_dp,       &
+!    pi = 3.141592653589E0_dp,       &
+    pi = ACOS(-1.0_dp),             &
     eps0 = 8.8541878176E-12_dp,     &
     mu0 = 4*pi*1E-7_dp,             &
     c0 = 2.997924580003E8_dp,       &
     eta0 = 3.767303134622E2_dp,     &
     hplank = 4.13566766225E-15_dp,  &
-    epsilon_dp = EPSILON(pi)
+    epsilon_dp = EPSILON(1.0_dp)
 
   REAL(KIND=dp), PARAMETER ::       &
     rad2deg = 180.0_dp/pi,          &
@@ -36,7 +37,7 @@ MODULE constants
     prd_2d = 2
 
   CHARACTER(LEN=32), PARAMETER  ::  &
-    ERR0 = 'Required json node missing!',   &
+    ERR0 = 'Invalid data in json node!',   &
     ERR1 = 'Procedure fails to run!',       &
     fmt_cmplx = '(SP, ES19.12, SP, ES19.12, "i")'
 END MODULE constants

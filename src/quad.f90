@@ -438,41 +438,45 @@ CONTAINS
     points(1:(n+1)) = a + h*(/(i,i=0,n)/)
   END SUBROUTINE get_simpsons_points
 
-  RECURSIVE FUNCTION asqz_aux(f, a, b, eps, s, fa, fb, fc, level, maxDepth) RESULT(res)
+  RECURSIVE FUNCTION asqz_aux(f, a, b, eps, s, fa, fb, fm, level, maxDepth) RESULT(res)
     COMPLEX (KIND=dp), EXTERNAL :: f
     REAL (KIND=dp), INTENT(IN) :: a, b, eps
-    COMPLEX (KIND=dp), INTENT(IN) :: s, fa, fb, fc
+    COMPLEX (KIND=dp), INTENT(IN) :: s, fa, fb, fm
     INTEGER, INTENT(IN) :: level, maxDepth
 
-    COMPLEX (KIND=dp) :: res, fd, fe, sleft, sright, s2
-    REAL (KIND=dp) :: c, h, d, e
+    COMPLEX (KIND=dp) :: res, flm, frm, sleft, sright, s2
+    REAL(KIND=dp) :: m, h, lm, rm
 
-    c = (a + b)/2
+    m = (a + b)/2
     h = b - a
 
-    d = (a + c)/2
-    e = (c + b)/2
-
-    fd = f(d)
-    fe = f(e)
-
-    sleft = (h/12)*(fa + 4*fd + fc)
-    sright = (h/12)*(fc + 4*fe + fb)
-
-    s2 = sleft + sright
-
-    ! IF(bottom<=0 .OR. (ABS(s2 - s)<=15*eps .AND. bottom<4) ) THEN
-    ! IF(level>=maxDepth .OR. (ABS(s2 - s)<=15*eps*ABS(s2) .AND. level>1) ) THEN
-    IF(level>=maxDepth .OR. (ABS(s2 - s)<=15*eps .AND. level>1) ) THEN
-       res = s2 + (s2 - s)/15
-      IF ( level>=maxDepth ) THEN
-       WRITE(*,*) 'Numerical integration fails as the setup accuracy is &
-                  not achieved for maximum (',maxDepth,') steps of iteration.'
-       STOP
-      END IF
+    lm = (a + m)/2
+    rm = (m + b)/2
+    
+    IF ( (eps/2.0_dp==eps) .OR. (a==lm) ) THEN
+      WRITE(*,*) 'Serious numerical trouble: it won''','t converge in asqz.'
+      STOP
     ELSE
-       res = asqz_aux(f, a, c, eps/2, sleft, fa, fc, fd, level+1, maxDepth) +&
-            asqz_aux(f, c, b, eps/2, sright, fc, fb, fe, level+1, maxDepth)
+      ! continue calculation
+      flm = f(lm)
+      frm = f(rm)
+
+      sleft = (h/12)*(fa + 4*flm + fm)
+      sright = (h/12)*(fm + 4*frm + fb)
+
+      s2 = sleft + sright
+
+      IF(level>=maxDepth .OR. (ABS(s2 - s)<=15*eps .AND. level>1) ) THEN
+        res = s2 + (s2 - s)/15
+        IF ( level>=maxDepth ) THEN
+          WRITE(*,*) 'Numerical integration fails as the setup accuracy is not'// &
+                      'achieved for maximum (',maxDepth,') steps of iteration.'
+          STOP
+        END IF
+      ELSE
+         res = asqz_aux(f, a, m, eps/2, sleft, fa, fm, flm, level+1, maxDepth) +&
+              asqz_aux(f, m, b, eps/2, sright, fm, fb, frm, level+1, maxDepth)
+      END IF
     END IF
   END FUNCTION asqz_aux
 
@@ -483,19 +487,24 @@ CONTAINS
     REAL(KIND=dp), INTENT(IN)     :: a, b, eps
     INTEGER, INTENT(IN)           :: maxDepth
 
-    COMPLEX (KIND=dp) :: fa, fb, fc, s, res
-    REAL (KIND=dp) :: c, h
+    COMPLEX (KIND=dp) :: fa, fb, fm, s, res
+    REAL (KIND=dp) :: m, h
 
-    c = (a + b)/2
+    m = (a + b)/2
     h = b - a
+
+    IF (h <= eps) THEN
+      WRITE(*,*) 'The interval is too narrow for numerical integration!'
+      STOP
+    END IF
 
     fa = f(a)
     fb = f(b)
-    fc = f(c)
+    fm = f(m)
 
-    s = (h/6)*(fa + 4*fc + fb)
+    s = (h/6)*(fa + 4*fm + fb)
 
-    res = asqz_aux(f, a, b, eps, s, fa, fb, fc, 0, maxDepth)
+    res = asqz_aux(f, a, b, eps, s, fa, fb, fm, 0, maxDepth)
   END FUNCTION asqz
 
   ! Integrates f(x,y) over [x1,x2]x[y1,y2].

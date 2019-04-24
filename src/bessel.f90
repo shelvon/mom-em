@@ -14,7 +14,7 @@ MODULE bessel
 
     INTEGER, PARAMETER                  :: norders=50, nzeros=1
     REAL(KIND=dp), DIMENSION(0:norders,nzeros), PARAMETER :: &
-      cyl_bessel_zeros = (/ &
+      cyl_bessel_zeros = RESHAPE( (/ &
       2.404825557695772768621631879326454643124244909146_dp, &
       3.8317059702075123156144358863081607665645452742878_dp, &
       5.1356223018406825563014016901377654569737723475006_dp, &
@@ -65,13 +65,15 @@ MODULE bessel
       53.983161477928257904969383382307960375947829258943_dp, &
       55.028330299737101743494256596552294445779769739072_dp, &
       56.072903051148752617426323922727085339024827707947_dp, &
-      57.116899160119174119362278697052681975274983051978_dp/)
+      57.116899160119174119362278697052681975274983051978_dp/), &
+      (/norders+1,nzeros/) )
 
 
   INTERFACE besselj
     MODULE PROCEDURE xbesselj_int, xbesselj_real, zbesselj_real
   END INTERFACE
 
+  ! d: derivative
   INTERFACE besseljd
     MODULE PROCEDURE xbesseljd_int
   END INTERFACE
@@ -171,8 +173,8 @@ CONTAINS
     h = b - a
     xtol = 0.01_dp*h/REAL(n-1);
 
-    ! f(1:n) = CMPLX(0.0_dp, 0.0_dp)
-    f(1+n:2*n) = CMPLX(0.0_dp, 0.0_dp)
+    ! f(1:n) = CMPLX(0,0,KIND=dp)
+    f(1+n:2*n) = CMPLX(0,0,KIND=dp)
     DO j = 1, n
       xj = a +REAL(j-1, KIND=dp)*h/REAL(n-1)
       IF ( xj < xtol ) THEN
@@ -230,7 +232,7 @@ CONTAINS
 
       ! nu, r1, r2 from host association
       ! res = (/besselj(nu-1, r2*x), besselj(nu, r2*x)/)
-      res = CMPLX( (/besselj(nu-1, r2*x), besselj(nu, r2*x)/), 0.0_dp) *  &
+      res = CMPLX( (/besselj(nu-1, r2*x), besselj(nu, r2*x)/), 0.0_dp, KIND=dp) *  &
             EXP( (0,1)*r1*(1.0_dp-x**2)**(0.5_dp) )
     END FUNCTION w_vec
 
@@ -246,7 +248,7 @@ CONTAINS
       ! res = RESHAPE((/(nu-1)/x, r2, -r2, -nu/x/), (/2, 2/))
       ! case2, exp(i*r1*(1-x^2)^0.5)*J_nu(r_2 * x)
       b11 = -(0,1)*r1*x*(1.0_dp-x**2)**(-0.5_dp)
-      b12 = CMPLX(0.0_dp,0.0_dp)
+      b12 = CMPLX(0,0,KIND=dp)
       b0 = RESHAPE((/b11, b12, b12, b11/), (/2, 2/))
       a0 = RESHAPE((/REAL(nu-1)/x, r2, -r2, -REAL(nu)/x/), (/2, 2/))
 
@@ -278,7 +280,7 @@ CONTAINS
     h = b - a
     xtol = 0.0001_dp*h/REAL(n-1);
 
-    f(1+n:2*n) = CMPLX(0.0_dp, 0.0_dp)
+    f(1+n:2*n) = CMPLX(0,0,KIND=dp)
     DO j = 1, n
       ! 1. equally spaced nodes
       ! xj = a +REAL(j-1, KIND=dp)*h/REAL(n-1)
@@ -332,7 +334,7 @@ CONTAINS
       REAL(KIND=dp), INTENT(IN)       :: x
       COMPLEX(KIND=dp), DIMENSION(2)  :: res
 
-      res = CMPLX( (/besselj(nu-1, r2*x), besselj(nu, r2*x)/), 0.0_dp) *  &
+      res = CMPLX( (/besselj(nu-1, r2*x), besselj(nu, r2*x)/), 0.0_dp, KIND=dp) *  &
             EXP( (0,1)*r1*(1.0_dp-x**2)**(0.5_dp) )
     END FUNCTION w_vec
 
@@ -344,7 +346,7 @@ CONTAINS
       COMPLEX(KIND=dp), DIMENSION(2, 2)   :: b0, a0
 
       b11 = -(0,1)*r1*x*(1.0_dp-x**2)**(-0.5_dp)
-      b12 = CMPLX(0.0_dp,0.0_dp)
+      b12 = CMPLX(0,0,KIND=dp)
       b0 = RESHAPE((/b11, b12, b12, b11/), (/2, 2/))
       a0 = RESHAPE((/REAL(nu-1)/x, r2, -r2, -REAL(nu)/x/), (/2, 2/))
       res = a0 + b0

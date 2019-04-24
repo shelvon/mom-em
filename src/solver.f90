@@ -28,24 +28,25 @@ CONTAINS
     IF ( model%simulation%solver%name == 'source' ) THEN
     ! calculate background field, i.e. solver == source
       ! check required parameters
-      IF ( ALLOCATED(model%physics%source) == .FALSE. ) THEN
-         WRITE(*,*) 'Set up source parameters in the node &
-                    model%physics%source before solving!'
+      IF ( ALLOCATED(model%physics%source) .EQV. .FALSE. ) THEN
+         WRITE(*,*) 'Set up source parameters in the node'//  &
+                    'model%physics%source before solving!'
          RETURN
       END IF
 
-      IF ( ALLOCATED(model%physics%media) == .FALSE. ) THEN
-         WRITE(*,*) 'Set up media parameters in the node &
-                    model%physics%media before solving!'
+      IF ( ALLOCATED(model%physics%media) .EQV. .FALSE. ) THEN
+         WRITE(*,*) 'Set up media parameters in the node'// &
+                    'model%physics%media before solving!'
          RETURN
       END IF
 
-      IF ( ALLOCATED(model%solution%focal) == .FALSE. ) THEN
-         WRITE(*,*) 'Set up grid in focal region in the node &
-                    model%solution%focal before solving!'
+      IF ( ALLOCATED(model%solution%focal) .EQV. .FALSE. ) THEN
+         WRITE(*,*) 'Set up grid in focal region in the node'// &
+                    'model%solution%focal before solving!'
          RETURN
       END IF
 
+      WRITE(*,*) '  Calculating the incident beam'
       CALL solve_source(  model%name,               &
                           model%physics%media(0:1), & ! only for two domains
                           model%physics%source,     &
@@ -55,26 +56,24 @@ CONTAINS
     ! calculate the eigen modes at complex frequency
       ! check required parameters
       IF ( LEN_TRIM(ADJUSTL(model%geom%mesh%file)) == 0 ) THEN
-         WRITE(*,*) 'Set up mesh file in the node &
-                    model%geom%mesh before solving!'
+         WRITE(*,*) 'Set up mesh file in the node model%geom%mesh before solving!'
          RETURN
       END IF
 
-      IF ( ALLOCATED(model%geom%domain) == .FALSE. ) THEN
-         WRITE(*,*) 'Set up domain in the node &
-                    model%geom%domain before solving!'
+      IF ( ALLOCATED(model%geom%domain) .EQV. .FALSE. ) THEN
+         WRITE(*,*) 'Set up domain in the node model%geom%domain before solving!'
          RETURN
       END IF
 
-      IF ( ALLOCATED(model%physics%media) == .FALSE. ) THEN
-         WRITE(*,*) 'Set up media parameters in the node &
-                    model%physics%media before solving!'
+      IF ( ALLOCATED(model%physics%media) .EQV. .FALSE. ) THEN
+         WRITE(*,*) 'Set up media parameters in the node'// &
+                    'model%physics%media before solving!'
          RETURN
       END IF
 
-      IF ( ALLOCATED(model%simulation%zwl) == .FALSE. ) THEN
-         WRITE(*,*) 'Set up complex wavelength for mode solver  &
-                    model%simulation%zwl before solving!'
+      IF ( ALLOCATED(model%simulation%zwl) .EQV. .FALSE. ) THEN
+         WRITE(*,*) 'Set up complex wavelength for mode solver'// &
+                    'model%simulation%zwl before solving!'
          RETURN
       END IF
 
@@ -148,25 +147,25 @@ CONTAINS
         END DO ! idom
         eps_tmp(iwl) = eps
 
-!        ! Solve modes
-!        CALL CPU_TIME( time_begin )
+        ! Solve modes
+        CALL CPU_TIME( time_begin )
 !        CALL modes_mueller(geom%domain, ga, media, simulation%zwl(iwl), mode(iwl))
-!        CALL CPU_TIME( time_end )
-!        time_loop = time_loop + time_end-time_begin
-!        WRITE(*,*) 'Wall-clock time:'
-!        WRITE(*,*) sec_to_str( time_end-time_begin )
-!        WRITE(*,*) 'Wall-clock time (loop):'
-!        WRITE(*,*) sec_to_str( time_loop )
-!
-!        ! incrementally write result in each loop
-!        CALL write_matrix( TRIM(mname)//'-wl'//TRIM(num2str(iwl))//'-eig.txt',  &
-!                           mode(iwl)%eigval )
-!
-!        IF ( iwl == nwl ) THEN
-!          filename = TRIM(mname)//'-zwl'//num2str(iwl)
+        CALL CPU_TIME( time_end )
+        time_loop = time_loop + time_end-time_begin
+        WRITE(*,*) 'Wall-clock time:'
+        WRITE(*,*) sec_to_str( time_end-time_begin )
+        WRITE(*,*) 'Wall-clock time (loop):'
+        WRITE(*,*) sec_to_str( time_loop )
+
+        ! incrementally write result in each loop
+        CALL write_matrix( TRIM(mname)//'-wl'//TRIM(num2str(iwl))//'-eig.txt',  &
+                           mode(iwl)%eigval )
+
+        IF ( iwl == nwl ) THEN
+          filename = TRIM(mname)//'-zwl'//num2str(iwl)
 !          CALL modes_nfms( TRIM(filename), geom, ga, media, mode(iwl) )
-!        END IF
-!
+        END IF
+
 !        ! erase temporary results from memory
 !        IF ( .NOT. (simulation%solver%memory) ) THEN
 !          DEALLOCATE( mode(iwl)%modeidx, mode(iwl)%eigval, mode(iwl)%eigvec )
@@ -191,7 +190,7 @@ CONTAINS
     ! ri1: refractive index of medium 1, before focusing lens
     ! ri2: refractive index of medium 2, after focusing lens
     COMPLEX (KIND=dp)                     :: ri1, ri2
-    INTEGER                               :: ifocal, nfocal, isrc
+    INTEGER                               :: ifocal, nfocal, isrc, nx, ny, nz
     REAL(KIND=dp)                         :: wl
     CHARACTER(LEN=256)                    :: file_h5
 
@@ -203,35 +202,28 @@ CONTAINS
       ri1 = get_ri(media(0)%ri, wl)
       ri2 = get_ri(media(1)%ri, wl)
 
-      ! Calculate the focal field in 3d grid, i.e. gridx, gridy, gridz.
+      ny = focal(ifocal)%grid%ny
+      nx = focal(ifocal)%grid%nx
+      nz = focal(ifocal)%grid%nz
+!      ALLOCATE( focal(ifocal)%field%ex(ny, nx, nz) )
+!      ALLOCATE( focal(ifocal)%field%ey(ny, nx, nz) )
+      ALLOCATE( focal(ifocal)%field%erho(ny, nx, nz) )
+      ALLOCATE( focal(ifocal)%field%ephi(ny, nx, nz) )
+      ALLOCATE( focal(ifocal)%field%ez(ny, nx, nz) )
+!      ALLOCATE( focal(ifocal)%field%hx(ny, nx, nz) )
+!      ALLOCATE( focal(ifocal)%field%hy(ny, nx, nz) )
+      ALLOCATE( focal(ifocal)%field%hrho(ny, nx, nz) )
+      ALLOCATE( focal(ifocal)%field%hphi(ny, nx, nz) )
+      ALLOCATE( focal(ifocal)%field%hz(ny, nx, nz) )
 
-      ALLOCATE(focal(ifocal)%field%ex(1:focal(ifocal)%grid%ny,  &
-                                      1:focal(ifocal)%grid%nx,  &
-                                      1:focal(ifocal)%grid%nz) )
-      ALLOCATE(focal(ifocal)%field%ey(1:focal(ifocal)%grid%ny,  &
-                                      1:focal(ifocal)%grid%nx,  &
-                                      1:focal(ifocal)%grid%nz) )
-      ALLOCATE(focal(ifocal)%field%ez(1:focal(ifocal)%grid%ny,  &
-                                      1:focal(ifocal)%grid%nx,  &
-                                      1:focal(ifocal)%grid%nz) )
-      ALLOCATE(focal(ifocal)%field%hx(1:focal(ifocal)%grid%ny,  &
-                                      1:focal(ifocal)%grid%nx,  &
-                                      1:focal(ifocal)%grid%nz) )
-      ALLOCATE(focal(ifocal)%field%hy(1:focal(ifocal)%grid%ny,  &
-                                      1:focal(ifocal)%grid%nx,  &
-                                      1:focal(ifocal)%grid%nz) )
-      ALLOCATE(focal(ifocal)%field%hz(1:focal(ifocal)%grid%ny,  &
-                                      1:focal(ifocal)%grid%nx,  &
-                                      1:focal(ifocal)%grid%nz) )
       CALL focal_field( source(isrc)%focus, wl, ri1, ri2, &
-                        focal(ifocal)%grid, focal(ifocal)%field )
+                        focal(ifocal)%grid, focal(ifocal)%field)
 
-      !WRITE(*,*) 'before write_field_h5'
       ! save focal field to hdf5 file
       file_h5 = TRIM(mname) // '-focal-' //    &
                 TRIM(focal(ifocal)%label) //'.h5'
-      CALL write_field_h5(TRIM(file_h5), &
-                          focal(ifocal)%grid, focal(ifocal)%field )
+      CALL write_field_h5(TRIM(file_h5), focal(ifocal)%grid, focal(ifocal)%field, 'pol' )
+
     END DO! ifocal
 
   END SUBROUTINE solve_source
@@ -256,27 +248,27 @@ CONTAINS
     WRITE(*,*) '--- Begin wavelength batch ---'
 
     ! Check that necessary input data exists.
-    IF(ALLOCATED(b%sols)==.FALSE.) THEN
+    IF(ALLOCATED(b%sols) .EQV. .FALSE.) THEN
        WRITE(*,*) 'Setup wavelengths prior to solving!'
        RETURN
     END IF
 
-    IF(ALLOCATED(b%mesh%nodes)==.FALSE.) THEN
+    IF(ALLOCATED(b%mesh%nodes) .EQV. .FALSE.) THEN
        WRITE(*,*) 'Load mesh prior to solving!'
        RETURN
     END IF
 
-    IF(ALLOCATED(b%domains)==.FALSE.) THEN
+    IF(ALLOCATED(b%domains) .EQV. .FALSE.) THEN
        WRITE(*,*) 'Set up domains prior to solving!'
        RETURN
     END IF
 
-    IF(ALLOCATED(b%media)==.FALSE.) THEN
+    IF(ALLOCATED(b%media) .EQV. .FALSE.) THEN
        WRITE(*,*) 'Set up media prior to solving!'
        RETURN
     END IF
 
-    IF(ALLOCATED(b%src)==.FALSE.) THEN
+    IF(ALLOCATED(b%src) .EQV. .FALSE.) THEN
        WRITE(*,*) 'Set up source prior to solving!'
        RETURN
     END IF
@@ -699,7 +691,7 @@ CONTAINS
           END IF
        END DO
 
-       IF(found_face==.FALSE.) THEN
+       IF(found_face .EQV. .FALSE.) THEN
           WRITE(*,*) 'Could not find epsp!'
           STOP
        END IF

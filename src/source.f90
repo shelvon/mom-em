@@ -14,7 +14,6 @@ MODULE source
   USE quad
   USE rwgf
   USE dipole
-  USE pupil
 
   IMPLICIT NONE
 
@@ -566,7 +565,7 @@ CONTAINS
 
       common = integCommon(theta)
       j2= besselj(2, k*r*SIN(theta))
-      integ = common*SQRT(CMPLX(COS(theta)))*(SIN(THETA)**3)*j2
+      integ = common*SQRT(CMPLX(COS(theta),KIND=dp))*(SIN(THETA)**3)*j2
     END FUNCTION integI13
 
     FUNCTION integI14(theta) RESULT(integ)
@@ -576,7 +575,7 @@ CONTAINS
 
       common = integCommon(theta)
       j3= besselj(3, k*r*SIN(theta))
-      integ = common*SQRT(CMPLX(COS(theta)))*(SIN(THETA)**2)*(1.0_dp-COS(theta))*j3
+      integ = common*SQRT(CMPLX(COS(theta),KIND=dp))*(SIN(THETA)**2)*(1.0_dp-COS(theta))*j3
     END FUNCTION integI14
   END SUBROUTINE compute_focus_NH
 
@@ -744,7 +743,7 @@ CONTAINS
 
       common = integCommon(theta)
       j3=besselj(3,k*r*SIN(theta))
-      integ = common*SQRT(CMPLX(COS(theta)))*(SIN(THETA)**2)*(1.0_dp-COS(theta))*j3
+      integ = common*SQRT(CMPLX(COS(theta),KIND=dp))*(SIN(THETA)**2)*(1.0_dp-COS(theta))*j3
     END FUNCTION integI14
 
     FUNCTION integDrhoI11(theta) RESULT(integ)
@@ -791,7 +790,7 @@ CONTAINS
 
       common = integCommon(theta)
       jd = besselj3d(k*SIN(theta),r)
-      integ = common*SQRT(CMPLX(COS(theta)))*(SIN(THETA)**2)*(1.0_dp-COS(theta))*jd
+      integ = common*SQRT(CMPLX(COS(theta),KIND=dp))*(SIN(THETA)**2)*(1.0_dp-COS(theta))*jd
     END FUNCTION integDrhoI14
 
     FUNCTION integDDrhoI14(theta) RESULT(integ)
@@ -802,7 +801,7 @@ CONTAINS
 
       common = integCommon(theta)
       jd = besselj3dd(k*SIN(theta),r)
-      integ = common*SQRT(CMPLX(COS(theta)))*(SIN(THETA)**2)*(1.0_dp-COS(theta))*jd
+      integ = common*SQRT(CMPLX(COS(theta),KIND=dp))*(SIN(THETA)**2)*(1.0_dp-COS(theta))*jd
     END FUNCTION integDDrhoI14
 
   END FUNCTION beam_max_pt

@@ -312,9 +312,13 @@ COMMAND: solv
 DESCRIPTION:  
 Solves the problem.
 
-COMMAND: nfms [wlindex] [srcindex] [dindex]  
+COMMAND: nfms [wlindex] [srcindex] [modeindex] [dindex]  
 DESCRIPTION:  
-Computes the electric and magnetic fields corresponding to source [srcindex] on the surface of domain [dindex] of the particle at wavelength determined by [wlindex]. Produces a msh-file which can be inspected in gmsh.
+Computes the electric and magnetic fields corresponding to source [srcindex] on the surface of domain [dindex] of the particle at wavelength determined by [wlindex] when [modeindex] is set to 0. Produces a msh-file which can be inspected in gmsh. Using a nonzero [modeindex] requires setting [srcindex] to 0, this is intended for the mode solver which is still under the test phase.
+
+COMMAND: nfpl [wlindex], [dindex], [origin(1)], [origin(2)], [origin(3)], [v1(1)], [v1(2)], [v1(3)], [v2(1)], [v2(2)], [v2(3)], [n1], [n2], [tag]  
+DESCRIPTION:  
+Computes the electric and magnetic fields in a cut plane in domain [dindex] at the wavelength [wlindex]. The cut plane is determined by a corner point whose Cartesian coordinates x=[origin(1)] y= [origin(2)] and z=[origin(3)], two Cartesian vectors [v1] and [v2], and the numbers of grid points [n1] and [n2] along two vectors [v1] and [v2], respectively, the last [tag] is a string to name the cut plane especially when multiple cut planes are used.
 
 COMMAND: crst  
 DESCRIPTION:  

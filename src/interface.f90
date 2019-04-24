@@ -52,12 +52,12 @@ CONTAINS
     INTEGER, DIMENSION(:), POINTER :: vol_ids
     CHARACTER (LEN=256) :: numstr, oname
 
-    IF(ALLOCATED(b%domains)==.FALSE.) THEN
+    IF(ALLOCATED(b%domains) .EQV. .FALSE.) THEN
        WRITE(*,*) 'Error: no domains allocated!'
        STOP
     END IF
 
-    IF(ALLOCATED(b%mesh%faces)==.FALSE.) THEN
+    IF(ALLOCATED(b%mesh%faces) .EQV. .FALSE.) THEN
        WRITE(*,*) 'Error: master mesh has not been loaded!'
        STOP
     END IF
@@ -112,10 +112,15 @@ CONTAINS
     TYPE(batch), INTENT(INOUT) :: b
     CHARACTER (LEN=256) :: numstr, oname
     INTEGER :: i
+    TYPE(mesh_container), DIMENSION(:), ALLOCATABLE :: submeshes
 
     CALL determine_edge_couples(b%mesh, 1D-12)
-    CALL submesh_edge_connectivity(b%mesh, b%domains(:)%mesh)
-    CALL orient_basis(b%mesh, b%domains(:)%mesh)
+    ALLOCATE( submeshes(SIZE(b%domains(:)%mesh)) )
+    submeshes = b%domains(:)%mesh
+    CALL submesh_edge_connectivity(b%mesh, submeshes)
+    CALL orient_basis(b%mesh, submeshes )
+    b%domains(:)%mesh = submeshes
+    DEALLOCATE(submeshes)
 
     !CALL export_mesh(TRIM(b%name) // '.pmf', b%mesh)
     !DO i=1,SIZE(b%domains)
@@ -241,7 +246,7 @@ CONTAINS
     TYPE(batch), INTENT(INOUT) :: b
     INTEGER :: n, i
 
-    IF(ALLOCATED(b%sols)==.FALSE.) THEN
+    IF(ALLOCATED(b%sols) .EQV. .FALSE.) THEN
        WRITE(*,*) 'Error: no wavelengths set up!'
        RETURN
     END IF
@@ -268,7 +273,7 @@ CONTAINS
     REAL (KIND=dp), DIMENSION(3,6) :: chi2
     REAL (KIND=dp), DIMENSION(3,10) :: chi3
 
-    IF(ALLOCATED(b%media)==.FALSE.) THEN
+    IF(ALLOCATED(b%media) .EQV. .FALSE.) THEN
        WRITE(*,*) 'Error: no media allocated!'
        RETURN
     END IF
@@ -501,7 +506,7 @@ CONTAINS
     REAL (KIND=dp) :: sxyz_val, d
     TYPE(srcdata) :: src
 
-    IF(ALLOCATED(b%src)==.FALSE.) THEN
+    IF(ALLOCATED(b%src) .EQV. .FALSE.) THEN
        WRITE(*,*) 'Source must be setup before specifying scanning!'
        STOP
     END IF
@@ -547,7 +552,7 @@ CONTAINS
     REAL (KIND=dp), DIMENSION(3) :: pos
     TYPE(srcdata) :: src
 
-    IF(ALLOCATED(b%src)==.FALSE.) THEN
+    IF(ALLOCATED(b%src) .EQV. .FALSE.) THEN
        WRITE(*,*) 'Source must be setup before specifying move transform!'
        STOP
     END IF
@@ -566,7 +571,10 @@ CONTAINS
 
     READ(line,*) n
 
-    ALLOCATE(b%src(n))
+    IF(ALLOCATED(b%src) .EQV. .TRUE.) THEN
+      DEALLOCATE(b%src)
+      ALLOCATE(b%src(n))
+    END IF
 
     WRITE(*,'(A,I0,A)') ' Allocated ', n, ' sources.'
   END SUBROUTINE read_nsrc
@@ -593,7 +601,7 @@ CONTAINS
     CHARACTER (LEN=3) :: ext
     INTEGER :: nga, nfrags, index
 
-    IF(ALLOCATED(b%src)==.FALSE.) THEN
+    IF(ALLOCATED(b%src) .EQV. .FALSE.) THEN
        WRITE(*,*) 'No sources allocated!'
        STOP
     END IF
@@ -650,142 +658,6 @@ CONTAINS
        END IF
     END IF
   END SUBROUTINE read_ssrc
-
-  ! Define the pupil function in cylindrical coordinate as P(theta, phi)
-  ! which writes as P(theta, phi)=A(theta, phi)*exp(i*Phi(theta, phi)).
-  SUBROUTINE read_pfun(line, b)
-    CHARACTER (LEN=*), INTENT(IN) :: line
-    TYPE(batch), INTENT(INOUT) :: b
-
-    TYPE(pupil_type) :: pupil
-    CHARACTER (LEN=32) :: pupil_type
-    CHARACTER (LEN=32) :: aperture_name
-    CHARACTER (LEN=32) :: phase_name
-    INTEGER :: intervals_n
-
-    READ(line,*) pupil_type
-
-    IF(pupil_type=='analytical') THEN
-      WRITE(*,*) 'Pupil function type is set to be analytical.'
-      pupil%type = pupil_type
-
-      READ(line,*) pupil_type, aperture_name
-      IF(aperture_name=='circ') THEN
-        READ(line,*) pupil_type, pupil%aperture%type, pupil%aperture%circ%r, phase_name
-
-        IF(phase_name=='rect') THEN
-          READ(line,*)  pupil_type, aperture_name, pupil%aperture%circ%r,   &
-                        pupil%phase%type, pupil%phase%rect%delta, intervals_n
-          ALLOCATE(pupil%phase%rect%intervals(1:2,1:intervals_n))
-          pupil%phase%rect%intervals_n = intervals_n
-          READ(line,*)  pupil_type, aperture_name, pupil%aperture%circ%r,   &
-                        phase_name, pupil%phase%rect%delta, intervals_n,    &
-                        pupil%phase%rect%intervals(1:2,1:intervals_n)
-
-          b%pupil=pupil
-        ELSE IF(phase_name=='vortex') THEN
-          READ(line,*)  pupil_type, aperture_name, pupil%aperture%circ%r,   &
-                        pupil%phase%type, pupil%phase%vortex%charge
-
-          b%pupil=pupil
-        ELSE IF(phase_name=='petal') THEN
-          READ(line,*)  pupil_type, aperture_name, pupil%aperture%circ%r,   &
-                        pupil%phase%type, pupil%phase%petal%l
-
-          b%pupil=pupil
-        ELSE IF(phase_name=='bessel') THEN
-          READ(line,*)  pupil_type, aperture_name, pupil%aperture%circ%r,   &
-                        pupil%phase%type, pupil%phase%bessel%theta
-
-          b%pupil=pupil
-        ELSE IF(phase_name=='petal_rect') THEN
-          READ(line,*)  pupil_type, aperture_name, pupil%aperture%circ%r,   &
-                        pupil%phase%type, pupil%phase%petal_rect%l,         &
-                        pupil%phase%petal_rect%ln
-          ! currently only one petal is retained
-          pupil%phase%petal_rect%intervals_n = 1
-          ALLOCATE(pupil%phase%petal_rect%intervals(1:2,1))
-          pupil%phase%petal_rect%intervals(1:2,1) = 2.0*pi/7.0*&
-                        ( (/-1.0, 1.0/)/2.0 + (pupil%phase%petal_rect%ln-1) )
-          !test: keep 2.5 petal of petal7
-          pupil%phase%petal_rect%l = 7
-          pupil%phase%petal_rect%intervals(1:2,1) = 2.0*pi/7.0*&
-                        ((/-1.0, 1.0/)/4.0 + (2.75-1) )
-!          pupil%phase%petal_rect%intervals(1:2,1) = 2.0*pi/7.0*&
-!                        ((/-1.0, 1.0/)/2.0 + (2.75-1) )
-!          pupil%phase%petal_rect%intervals(1:2,1) = 2.0*pi/7.0*&
-!                        ((/-1.0, 1.0/)/4.0 + (2.5-1) )
-
-!          !test: keep 3 petal of petal8
-!          pupil%phase%petal_rect%l = 8
-!          pupil%phase%petal_rect%intervals(1:2,1) = 2.0*pi/8.0*&
-!                        ((/-1.0, 1.0/)/4.0 + (2.25-1) )
-          b%pupil=pupil
-        END IF
-      ELSE IF(aperture_name=='ring') THEN
-        WRITE(*,*) 'Not yet implemented argument value!'
-      ELSE
-        WRITE(*,*) 'Unrecognized source argument value!'
-        STOP
-      END IF
-    ELSE
-      WRITE(*,*) 'Please set either analytical or numerical!'
-      STOP
-    END IF
-
-  END SUBROUTINE read_pfun
-
-  ! Define the focal region where the focal field is calculated.
-  ! RECURSIVE SUBROUTINE read_fcrg(line, b)
-  SUBROUTINE read_fcrg(line, b)
-    CHARACTER (LEN=*), INTENT(IN) :: line
-    TYPE(batch), INTENT(INOUT) :: b
-
-    CHARACTER (LEN=1)   :: pl
-
-!    READ(line,*)    pl, b%focal%nx, b%focal%xa, b%focal%xb, &
-!                    pl, b%focal%ny, b%focal%ya, b%focal%yb, &
-!                    pl, b%focal%nz, b%focal%za, b%focal%zb
-!    ! WRITE(*,*) b%focal%xa
-!
-!    ALLOCATE(b%focal%x(1:b%focal%nx), b%focal%y(1:b%focal%ny), b%focal%z(1:b%focal%nz))
-!    ALLOCATE(b%focal%gridx(1:b%focal%ny, 1:b%focal%nx, 1:b%focal%nz))
-!    ALLOCATE(b%focal%gridy(1:b%focal%ny, 1:b%focal%nx, 1:b%focal%nz))
-!    ALLOCATE(b%focal%gridz(1:b%focal%ny, 1:b%focal%nx, 1:b%focal%nz))
-!    ALLOCATE(b%focal%grid(3,1:b%focal%ny, 1:b%focal%nx, 1:b%focal%nz))
-!
-!    CALL meshgrid(b%focal)
-!
-!    IF(pl=='x') THEN
-!      READ(line,*) pl, n
-!      IF(n==1) THEN
-!        READ(line,*) pl, b%focal%nx, b%focal%x0
-!        line_temp = line
-!        line_temp = line_temp((LEN_TRIM(pl)+LEN_TRIM(n)+LEN_TRIM(b%focal%x0))&
-!                    :LEN_TRIM(line_temp))
-!      ELSE IF(n>1) THEN
-!        READ(line,*) pl, b%focal%nx, b%focal%xa, b%focal%xb
-!        line_temp = line
-!        line_temp = line_temp((LEN_TRIM(pl)+LEN_TRIM(n)+LEN_TRIM(b%focal%xa)+LEN_TRIM(b%focal%xb))&
-!                    :LEN_TRIM(line_temp))
-!      END IF
-!    ELSE IF (pl=='y') THEN
-!      READ(line,*) pl, n
-!      IF(n==1) THEN
-!        READ(line,*) pl, b%focal%ny, b%focal%y0
-!      ELSE IF(n>1) THEN
-!        READ(line,*) pl, b%focal%ny, b%focal%ya, b%focal%yb
-!      END IF
-!    ELSE IF (pl=='z') THEN
-!      READ(line,*) pl, n
-!      IF(n==1) THEN
-!        READ(line,*) pl, b%focal%nz, b%focal%z0
-!      ELSE IF(n>1) THEN
-!        READ(line,*) pl, b%focal%nz, b%focal%za, b%focal%zb
-!      END IF
-!    END IF
-
-  END SUBROUTINE read_fcrg
 
   SUBROUTINE read_npgf(line, b)
     CHARACTER (LEN=*), INTENT(IN) :: line
@@ -1957,10 +1829,6 @@ CONTAINS
           CALL read_ssrc(line, b)
        ELSE IF(scmd=='osrc') THEN
           CALL read_osrc(line, b)
-       ELSE IF(scmd=='pfun') THEN
-          CALL read_pfun(line, b)
-       ELSE IF(scmd=='fcrg') THEN
-          CALL read_fcrg(line, b)
        ELSE IF(scmd=='solv') THEN
           ! CALL solve_batch(b)
           CALL read_solv(line,b)
@@ -2021,7 +1889,7 @@ CONTAINS
        END IF
     END DO
 
-    CALL delete_batch(b)
+    !CALL delete_batch(b)
 
   END SUBROUTINE msgloop
 
