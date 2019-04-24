@@ -27,8 +27,6 @@ module fson_path_m
     
     use fson_value_m 
     use fson_string_m
-    use constants
-    implicit none
 
     private
     
@@ -37,6 +35,7 @@ module fson_path_m
     interface fson_path_get
         module procedure get_by_path
         module procedure get_integer
+        module procedure get_long_integer
         module procedure get_real
         module procedure get_double
         module procedure get_logical
@@ -147,7 +146,7 @@ contains
                 
         ! grab the last child if present in the path
         if (child_i <= length) then            
-            p => fson_value_get(p, path(child_i:i-1))                    
+            p => fson_value_get(p, path(child_i:length))
             if(.not.associated(p)) then
                 return
             else                
@@ -191,9 +190,9 @@ contains
     ! GET INTEGER
     !
     subroutine get_integer(this, path, value)
-        type(fson_value), pointer   :: this, p
-        character(len=*), optional  :: path
-        integer                     :: value
+        type(fson_value), pointer :: this, p
+        character(len=*), optional :: path
+        integer :: value        
         
         
         nullify(p)                
@@ -204,20 +203,20 @@ contains
         end if
         
         if(.not.associated(p)) then
-            print *, "Unable to resolve : '", path, "', skip ..."
-            return
+            print *, "Unable to resolve path: ", path
+            call exit(1)
         end if
                 
         
         if(p % value_type == TYPE_INTEGER) then            
             value = p % value_integer
         else if (p % value_type == TYPE_REAL) then
-            value = INT(p % value_real)
+            value = int(p % value_real)
         else if (p % value_type == TYPE_LOGICAL) then
             if (p % value_logical) then
-                value = INT(1)
+                value = 1
             else
-                value = INT(0)
+                value = 0
             end if
         else
             print *, "Unable to resolve value to integer: ", path
@@ -226,6 +225,43 @@ contains
         
     end subroutine get_integer
     
+    !
+    ! GET LONG INTEGER
+    !
+    subroutine get_long_integer(this, path, value)
+      type(fson_value), pointer :: this, p
+      character(len=*), optional :: path
+      integer(kind = 8) :: value
+
+      nullify(p)
+      if(present(path)) then
+         call get_by_path(this=this, path=path, p=p)
+      else
+         p => this
+      end if
+
+      if(.not.associated(p)) then
+         print *, "Unable to resolve path: ", path
+         call exit(1)
+      end if
+
+      if(p % value_type == TYPE_INTEGER) then
+         value = p % value_long_integer
+      else if (p % value_type == TYPE_REAL) then
+         value = int(p % value_real, kind = 8)
+      else if (p % value_type == TYPE_LOGICAL) then
+         if (p % value_logical) then
+            value = 1
+         else
+            value = 0
+         end if
+      else
+         print *, "Unable to resolve value to long integer: ", path
+         call exit(1)
+      end if
+
+    end subroutine get_long_integer
+
     !
     ! GET REAL
     !
@@ -244,20 +280,20 @@ contains
         end if
         
         if(.not.associated(p)) then
-            print *, "Unable to resolve : '", path, "', skip ..."
-            return
+            print *, "Unable to resolve path: ", path
+            call exit(1)
         end if
                 
         
         if(p % value_type == TYPE_INTEGER) then            
-            value = REAL(p % value_integer)
+            value = real(p % value_long_integer)
         else if (p % value_type == TYPE_REAL) then
             value = p % value_real
         else if (p % value_type == TYPE_LOGICAL) then
             if (p % value_logical) then
-                value = REAL(1)
+                value = 1
             else
-                value = REAL(0)
+                value = 0
             end if
         else
             print *, "Unable to resolve value to real: ", path
@@ -270,9 +306,9 @@ contains
     ! GET DOUBLE
     !
     subroutine get_double(this, path, value)
-        type(fson_value), pointer   :: this, p
-        character(len=*), optional  :: path
-        REAL (KIND=dp)              :: value
+        type(fson_value), pointer :: this, p
+        character(len=*), optional :: path
+        double precision :: value        
         
         
         nullify(p)                
@@ -284,20 +320,20 @@ contains
         end if
         
         if(.not.associated(p)) then
-            print *, "Unable to resolve : '", path, "', skip ..."
-            return
+            print *, "Unable to resolve path: ", path
+            call exit(1)
         end if
                 
         
         if(p % value_type == TYPE_INTEGER) then            
-            value = REAL(p % value_integer, KIND=dp)
+            value = p % value_long_integer
         else if (p % value_type == TYPE_REAL) then
             value = p % value_double
         else if (p % value_type == TYPE_LOGICAL) then
             if (p % value_logical) then
-                value = REAL(1, KIND=dp)
+                value = 1
             else
-                value = REAL(0, KIND=dp)
+                value = 0
             end if
         else
             print *, "Unable to resolve value to double: ", path
@@ -305,6 +341,7 @@ contains
         end if
         
     end subroutine get_double
+    
     
     !
     ! GET LOGICAL
@@ -324,13 +361,13 @@ contains
         end if
         
         if(.not.associated(p)) then
-            print *, "Unable to resolve : '", path, "', skip ..."
-            return
+            print *, "Unable to resolve path: ", path
+            call exit(1)
         end if
                 
         
         if(p % value_type == TYPE_INTEGER) then            
-            value = (p % value_integer > 0)       
+            value = (p % value_long_integer > 0)
         else if (p % value_type == TYPE_LOGICAL) then
             value = p % value_logical
         else
@@ -357,13 +394,13 @@ contains
         end if
         
         if(.not.associated(p)) then
-            print *, "Unable to resolve : '", path, "', skip ..."
-            return
+            print *, "Unable to resolve path: ", path
+            call exit(1)
         end if
                 
         
         if(p % value_type == TYPE_STRING) then            
-            call fson_string_copy(p % value_string, value)
+            call fson_string_copy(p % value_string, value)          
         else
             print *, "Unable to resolve value to characters: ", path
             call exit(1)
@@ -393,8 +430,8 @@ contains
         end if
             
         if(.not.associated(p)) then
-            print *, "Unable to resolve : '", path, "', skip ..."
-            return
+            print *, "Unable to resolve path: ", path
+            call exit(1)
         end if
         
         if(p % value_type == TYPE_ARRAY) then            
@@ -561,8 +598,8 @@ contains
         end if
             
         if(.not.associated(p)) then
-            print *, "Unable to resolve : '", path, "', skip ..."
-            return
+            print *, "Unable to resolve path: ", path
+            call exit(1)
         end if
         
         if(p % value_type == TYPE_ARRAY) then            

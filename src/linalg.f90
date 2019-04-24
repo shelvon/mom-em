@@ -119,7 +119,7 @@ CONTAINS
        STOP
     END IF
 
-    LWORK = WORK(1)
+    LWORK = INT( WORK(1) )
 
     DEALLOCATE(WORK)
     ALLOCATE(WORK(LWORK))
@@ -142,8 +142,8 @@ CONTAINS
     COMPLEX(KIND=dp), DIMENSION(:), INTENT(INOUT)     :: b
 
     COMPLEX(KIND=dp), PARAMETER                       ::  &
-                      z1 = CMPLX(1.0_dp, 0.0_dp), &
-                      z0 = CMPLX(0.0_dp, 0.0_dp)
+                      z1 = CMPLX(1.0_dp, 0.0_dp, KIND=dp), &
+                      z0 = CMPLX(0.0_dp, 0.0_dp, KIND=dp)
     COMPLEX(KIND=dp), DIMENSION(:), ALLOCATABLE       :: work, tau, work_query
     REAL(KIND=dp), DIMENSION(:), ALLOCATABLE          :: rwork
     ! COMPLEX(KIND=dp), DIMENSION(:,:), ALLOCATABLE     :: R
@@ -358,7 +358,7 @@ CONTAINS
        END IF
     END IF
 
-    LWORK = WORK(1)
+    LWORK = INT( WORK(1) )
     DEALLOCATE(WORK)
     ALLOCATE(WORK(1:LWORK))
 
@@ -403,7 +403,7 @@ CONTAINS
        STOP
     END IF
     
-    LWORK = WORK(1)
+    LWORK = INT( WORK(1) )
     DEALLOCATE(WORK)
     ALLOCATE(WORK(1:LWORK))
     

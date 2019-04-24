@@ -216,7 +216,7 @@ CONTAINS
   ! Linear interpolation is used.
   FUNCTION get_ri_table(filename, wl) RESULT(res)
     CHARACTER(LEN=*), INTENT(IN)  :: filename
-    REAL(KIND=dp), INTENT(IN)    	:: wl
+    REAL(KIND=dp), INTENT(IN)     :: wl
     COMPLEX(KIND=dp)              :: res
     REAL(KIND=dp)                 :: wl1, wl2, nr1, ni1, nr2, ni2, t
     INTEGER                       :: fid = 10, iovar, i
@@ -254,15 +254,15 @@ CONTAINS
       ! IF( (wl1<=wl) .AND. (wl<=wl2) .AND. (wl1/=wl2)) THEN
       IF ( (wl1<=wl) .AND. (wl<=wl2) .AND. (ABS(wl1-wl2)>=epsilon_dp) ) THEN
         t = (wl-wl1)/(wl2 - wl1)
-        res = CMPLX(linterp(nr1, nr2, t), linterp(ni1, ni2, t))
+        res = CMPLX(linterp(nr1, nr2, t), linterp(ni1, ni2, t), KIND=dp)
         CLOSE(fid)
         RETURN
       ELSE IF(wl==wl1) THEN
-        res = CMPLX(nr1, ni1)
+        res = CMPLX(nr1, ni1, KIND=dp)
         CLOSE(fid)
         RETURN
       ELSE IF(wl==wl2) THEN
-        res = CMPLX(nr2, ni2)
+        res = CMPLX(nr2, ni2, KIND=dp)
         CLOSE(fid)
         RETURN
       ELSE IF(wl1>wl2) THEN

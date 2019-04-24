@@ -10,8 +10,8 @@ MODULE data
 
   ! electric and magnetic fields in 3d
   TYPE field3d_type
-    COMPLEX(KIND=dp), ALLOCATABLE, DIMENSION(:,:,:)   :: ex, ey, ez
-    COMPLEX(KIND=dp), ALLOCATABLE, DIMENSION(:,:,:)   :: hx, hy, hz
+    COMPLEX(KIND=dp), ALLOCATABLE, DIMENSION(:,:,:)   :: ex, ey, ez, erho, ephi
+    COMPLEX(KIND=dp), ALLOCATABLE, DIMENSION(:,:,:)   :: hx, hy, hz, hrho, hphi
   END TYPE field3d_type
 
   ! data structure in the focal region (3d)
@@ -82,30 +82,56 @@ MODULE data
   END type group_action
   !----data type for symmetry----
 
-  !----data type for pupil----
-  ! circ function for apodization in raidal direction
-  TYPE circ_type
-    REAL (KIND=dp)      :: r=1  ! radius of circ function, normalized to
-                                ! the waist radius of the incident beam
-  END TYPE circ_type
+  !----specifi data type for pupil function----
+  ! the nth azimuthal harmonics with certain local polarization state
+  TYPE basis_type
+    ! local polarization state: [r,phi,x,y,+45,-45,cp+,cp-]
+    CHARACTER(LEN=3)  :: pol
+    INTEGER           :: n
+  END TYPE basis_type
+
+  TYPE coslphi_type
+    CHARACTER(LEN=3)  :: pol
+    INTEGER           :: l
+  END TYPE coslphi_type
+
+  TYPE sinlphi_type
+    CHARACTER(LEN=3)  :: pol
+    INTEGER           :: l
+  END TYPE sinlphi_type
+
+  TYPE hgmn_type
+    CHARACTER(LEN=3)  :: pol
+    INTEGER           :: m,n!m/n indicates node number along x/y-direction
+  END TYPE hgmn_type
+
+  TYPE lgnl_type
+    CHARACTER(LEN=3)  :: pol
+    INTEGER           :: n,l!n/l indicates node number along r/phi-direction
+  END TYPE lgnl_type
 
   ! Intervals where function is equal to 1, which is also
   ! where the phase modulation applies.
   TYPE rect_type
-    REAL (KIND=dp), DIMENSION(1:2)              :: delta! phase shift [\pi]
-    INTEGER                                     :: intervals_n
-    ! REAL (KIND=dp), DIMENSION(2) :: intervals
-    REAL (KIND=dp), DIMENSION(:,:), ALLOCATABLE :: intervals
-    REAL (KIND=dp), DIMENSION(:,:), ALLOCATABLE :: dj
-    ! with (1,:) stores aj and (2,:) bj
-    ! aj for cos(j\phi) and bj for sin(j\phi)
+    CHARACTER(LEN=3)                            :: pol
+    REAL(KIND=dp), DIMENSION(:), ALLOCATABLE    :: delta! phase shift [\pi]
+    INTEGER                                     :: series_n, intervals_n
+    REAL(KIND=dp), DIMENSION(:,:), ALLOCATABLE  :: intervals
   END TYPE rect_type
 
-  ! topological charge of petal beam
-  TYPE petal_type
-    INTEGER :: l  ! l is the integer subindex in
-                  ! Petal_{p,l} = LG_{p,l} + LG_{p,-l}
-  END TYPE petal_type
+  !> \f$ \sin^y(x \theta) \f$, with
+  !! 'y' the power to sin function and 'x' the multiplier to variable theta
+  TYPE Rsin_type
+    INTEGER   :: x, y
+  END TYPE Rsin_type
+
+  TYPE Rcos_type
+    INTEGER   :: x, y
+  END TYPE Rcos_type
+
+  TYPE Rlg_type
+    INTEGER   :: n, l
+  END TYPE Rlg_type
 
   ! petal beam + rect phase mask
   TYPE petal_rect_type
@@ -117,11 +143,12 @@ MODULE data
   END TYPE petal_rect_type
 
   TYPE bessel_type
-    CHARACTER(LEN=3)  :: input ! input beam: rad/azi
-    INTEGER           :: j = 0 ! jth-order of Bessel function
+    ! local polarization state: [r,phi,x,y,+45,-45,cp+,cp-]
+    CHARACTER(LEN=3)  :: pol
+    INTEGER           :: j ! jth-order of Bessel function
     REAL(KIND=dp)     :: theta ! the diverging angle (of axicon)
                                ! going into J_j(k \rho sin (\theta))
-    REAL(KIND=dp)     :: delta ! arising from a finite thickness of the ring
+    REAL(KIND=dp)     :: delta ! diverging angles span over delta interval
     INTEGER           :: nbasis ! number of basis functions in bessel_transform
     CHARACTER(LEN=12) :: polyName ! name of basis function
   END TYPE bessel_type
@@ -131,45 +158,89 @@ MODULE data
                       ! over one rotation in azimuthal angle
   END TYPE vortex_type
 
-  TYPE aperture_type
-    CHARACTER (LEN=32)  :: type ! name of the aperture function, chosen below
-    TYPE(circ_type)     :: circ
-  END TYPE aperture_type
-
   TYPE phase_type
     CHARACTER(LEN=32)       :: type   ! name of the phase function below
     CHARACTER(LEN=8)        :: input  ! input beam: hg00, hg01, hg10, rad/azi
     INTEGER                 :: nMax   ! series expansion up to nMax order
     TYPE(rect_type)         :: rect   ! binary type phase modulation
     TYPE(vortex_type)       :: vortex ! spiral phase plate
-    TYPE(petal_type)        :: petal  ! petal beam phase term
+    TYPE(lgnl_type)        :: petal  ! petal beam phase term
     TYPE(bessel_type)       :: bessel ! bessel beam
     TYPE(petal_rect_type)   :: petal_rect ! petal beam phase + rect phase
     REAL(KIND=dp), DIMENSION(1:2) :: thetaRot ! rotation angles[deg], x-, y-pols
     COMPLEX(KIND=dp), DIMENSION(1:2) :: vJones ! Jones vector, x-, y-pols
   END TYPE phase_type
 
-  TYPE pupil_type
-    ! either analytical or numerical
-    CHARACTER (LEN=10)  :: type = 'analytical'
 
-    ! aperture function
-    TYPE(aperture_type) :: aperture
+  !>
+  !> The general description for the pupil function, which applies to
+  !> the basis beam profile, such that\f$ \bar{E}_i = \bar{P}(\theta,\phi)E_b\f$,
+  !> where \f$ E_b = E0 f_w(\theta) \f$
+  !! with \f$ E0 \f$ controls the absolute field amplitude and
+  !! \f$ f_w(\theta)=
+  !! \exp\left(-\frac{1}{f_{0}^{2}}\frac{\sin^{2}\theta}{\sin^{2}\theta_{\max}}\right)
+  !! \f$ the common factor shared by Gaussian beams.
+  !> The pupil function is a 3*1 column vector,
+  !> \f[ \bar{P}(\theta,\phi)\equiv\left[P_{r},P_{\phi},P_{z}\right]^{T} \f]
+  !> with each element representing the modulation (complex-valued) to the
+  !> basis field profile with specific functional forms. Each modulation component
+  !> is a separable function of \f$\theta\f$ and \f$\phi\f$ that writes as
+  !> \f[ P_{q}(\theta,\phi)=R_{q}(\theta)\Phi_{q}(\phi). \f]
+  !> For example, \f$ R_{q}(\theta) = 1 \f$ or \f$ \sin(\theta) \f$, and the
+  !! \f$\phi\f$-dependent part \f$\Phi_{q}(\phi)\f$ can be further written
+  !! as a series expansion of azimuthal harmonics,
+  !> \f$ \Phi_{q}(\phi)=\sum_{n=-\infty}^{+\infty}c_{n}^{q}e^{in\phi}, \f$
+  !> with \f$n\in\mathbb{Z}, c_{n}\in\mathbb{C}\f$.
 
-    ! phase function
-    TYPE(phase_type)    :: phase
+  !----function type for R_q(\theta)
+  TYPE funR_type
+    ! function name, [const|sin|cos|H1]
+    CHARACTER(LEN=5)   :: fun
 
-    ! The complex-valued Fourier expansion coefficient, works only for
-    ! pupil function that is independent of radial variable.
-    ! cn = 1/(2*pi)*\Int_{-pi}^{pi} e^{i\Phi(\phi)}e^{-i n \phi} d\phi
+    ! lower and upper bounds of the integration over theta
+    REAL(KIND=dp), DIMENSION(1:2) :: thetaBounds
+
+    ! supported functional forms
+    COMPLEX(KIND=dp)    :: const
+    TYPE(Rsin_type)     :: sin
+    TYPE(Rcos_type)     :: cos
+    TYPE(Rlg_type)      :: lg
+  END TYPE funR_type
+
+  !----function type for Phi_q(\theta), with q denotes r,phi or z component
+  TYPE funPhi_type
+    ! function name, either 'series' or the following supported functional forms.
+    ! [series]: user should provide the complex-valued expansion coefficients cn.
+    ! [other]: cn is calculated accordingly.
+    CHARACTER(LEN=18)   :: fun
+
+    !> The expansion coefficient of the nth azimuthal harmonics is
+    !! \f$ c_{n}^{q}=\frac{1}{2\pi}
+    !! \int\limits _{-\pi}^{+\pi}\Phi_{q}(\phi)e^{-in\phi}d\phi \f$, with
+    !! \f$ \Phi_{q}(\phi) \f$ takes one of the following functional forms.
     COMPLEX(KIND=dp), DIMENSION(:), ALLOCATABLE :: cn
+
+    ! supported functional forms, which determine 'cn'
+    TYPE(rect_type)     :: rect
+  END TYPE funPhi_type
+
+  TYPE pupil_type
+    ! choose either 'analytical' or 'numerical'
+    ! currently, only 'analytical' type is implemented
+    CHARACTER(LEN=10)   :: type = 'analytical'
+
+    ! radial and azimuthal function with index 1->r, 2->phi, 3->z
+    ! applying to E_r,phi,z separately
+    TYPE(funR_type), DIMENSION(1:3)   :: R
+    TYPE(funPhi_type), DIMENSION(1:3) :: Phi
+
   END TYPE pupil_type
   !----data type for pupil----
 
 
   !----data type for source----
   !
-  ! Plane wave in general form:
+  ! --Plane wave in general form:
   ! E = (E1*e1 + E2*e2)*exp(i*k*r)*exp(-i*omega*t),
   ! where direction of wave propagation vector is k;
   ! e1, e2 are two orthogonal basis unit vector and
@@ -182,13 +253,13 @@ MODULE data
   ! The eccentricity and orientation of the ellipse depend on the
   ! phase difference and the amplitude ratio B/A.
   !
-  ! --three cases:
+  ! Three cases:
   ! a) phase = pi*n : linearly polarized
   !    then, psi or A/B value defines the polarization direction
   ! b) phase = pi/2*n & A = B: circularly porlarized
   ! c) arbitrary phase and A, B values: elliptically polarized
   !
-  ! --k wave vector
+  ! The wave vector k
   ! theta: angle between +z axis and wave vector k;
   ! phi: angle between +x axis and k projected on to xy plane
   ! when theta = 0 or 180, then phi value does not matter
@@ -201,17 +272,30 @@ MODULE data
     REAL(KIND=dp)     :: A=1, B=0! electric field strength, to be normalized
   END TYPE pw_type
 
-  ! focus beams are catagorized as:
-  ! -- hg00, hg01, hg10
-  ! -- linear, rad, azi
+  ! focus beams are catagorized by the input beam types which may take:
+  ! -- pupil, basis, cos, sin, hg, rect
   ! -- bessel, petal beams
-  ! -- others, to be done
   TYPE focus_type
-    CHARACTER(LEN=32)           :: type
-    REAL(KIND=dp)               :: focal, waist, na
+    CHARACTER(LEN=32)           :: input
+    REAL(KIND=dp)               :: E0, focal, waist, na
     REAL(KIND=dp), DIMENSION(3) :: pos
+    LOGICAL                     :: norm ! normalize beam to maximum in focal plane
+    ! if paraxial = .TRUE., then apply the paraxial approximation
+    ! by default, paraxial = .FALSE.
+    LOGICAL                     :: paraxial
+
+    ! valid option for 'input' beam type
+    TYPE(pupil_type)            :: pupil! general case
+    ! the following specific beam type is generated by the general 'pupil' type
+    TYPE(basis_type)            :: invbasis
+    TYPE(basis_type)            :: basis
+    TYPE(coslphi_type)          :: cos
+    TYPE(sinlphi_type)          :: sin
+    TYPE(hgmn_type)             :: hg
+    TYPE(lgnl_type)             :: lg
+    TYPE(rect_type)             :: rect
     TYPE(bessel_type)           :: bessel
-    TYPE(petal_type)            :: petal
+    TYPE(lgnl_type)             :: petal
   END TYPE focus_type
 
   TYPE srcdata
@@ -536,9 +620,9 @@ MODULE data
   ! model->physics->source
   TYPE source_type
     CHARACTER(LEN=32)             :: type
-    LOGICAL                       :: norm ! normalize beam to maximum in focal plane
     TYPE(pw_type)                 :: pw
     TYPE(focus_type)              :: focus
+    TYPE(focus_type)              :: paraxial
   END TYPE source_type
 
   ! model->physics
@@ -546,8 +630,6 @@ MODULE data
     TYPE(group_type)                              :: group
     TYPE(media_type), DIMENSION(:), ALLOCATABLE   :: media
     TYPE(source_type), DIMENSION(:), ALLOCATABLE  :: source
-    ! TYPE(pupil_type), DIMENSION(:), ALLOCATABLE   :: pupil
-    TYPE(pupil_type)                              :: pupil
   END TYPE physics_type
 
   ! model->simulation->solver

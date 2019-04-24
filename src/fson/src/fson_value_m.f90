@@ -26,7 +26,6 @@
 module fson_value_m
 
     use fson_string_m
-    use constants
 
     implicit none
 
@@ -44,6 +43,7 @@ module fson_value_m
     integer, public, parameter :: TYPE_REAL = 5
     integer, public, parameter :: TYPE_LOGICAL = 6
 
+
     !
     ! FSON VALUE
     !
@@ -52,8 +52,9 @@ module fson_value_m
         integer :: value_type = TYPE_UNKNOWN
         logical :: value_logical
         integer :: value_integer
+        integer(kind = 8) :: value_long_integer
         real :: value_real
-        REAL (KIND=dp)  :: value_double
+        double precision :: value_double
         integer, private :: count = 0
         type(fson_string), pointer :: value_string => null()
         type(fson_value), pointer :: next => null()
@@ -95,7 +96,6 @@ contains
       logical, intent(in), optional :: destroy_next
 
       type(fson_value), pointer :: p
-      integer :: count
       logical :: donext
 
       if (present(destroy_next)) then
@@ -171,7 +171,7 @@ contains
     ! FSON_VALUE_COUNT
     !
     integer function fson_value_count(this) result(count)
-        type(fson_value), pointer :: this, p
+        type(fson_value), pointer :: this
 
         count = this % count
 
@@ -217,23 +217,24 @@ contains
     function get_by_name_string(this, name) result(p)
         type(fson_value), pointer :: this, p
         type(fson_string), pointer :: name
-        integer :: i                
+        integer :: i, count
         
         if(this % value_type .ne. TYPE_OBJECT) then
             nullify(p)
             return 
         end if
-        
-        do i=1, fson_value_count(this)
-            p => fson_value_get(this, i)
-            if (fson_string_equals(p%name, name)) then                
-                return
-            end if
+
+        count = fson_value_count(this)
+        p => this%children
+        do i = 1, count
+           if (fson_string_equals(p%name, name)) then
+              return
+           end if
+           p => p%next
         end do
         
         ! didn't find anything
         nullify(p)
-        
         
     end function get_by_name_string
     
@@ -258,34 +259,34 @@ contains
         case(TYPE_OBJECT)
             print *, repeat(" ", spaces), "{"
             count = fson_value_count(this)
+            element => this%children
             do i = 1, count
-                ! get the element
-                element => fson_value_get(this, i)
-                ! get the name
-                call fson_string_copy(element % name, tmp_chars)
-                ! print the name
-                print *, repeat(" ", spaces), '"', trim(tmp_chars), '":'
-                ! recursive print of the element
-                call fson_value_print(element, tab + 1)
-                ! print the separator if required
-                if (i < count) then
-                    print *, repeat(" ", spaces), ","
-                end if
+               ! get the name
+               call fson_string_copy(element % name, tmp_chars)
+               ! print the name
+               print *, repeat(" ", spaces), '"', trim(tmp_chars), '":'
+               ! recursive print of the element
+               call fson_value_print(element, tab + 1)
+               ! print the separator if required
+               if (i < count) then
+                  print *, repeat(" ", spaces), ","
+               end if
+               element => element%next
             end do
 
             print *, repeat(" ", spaces), "}"
         case (TYPE_ARRAY)
             print *, repeat(" ", spaces), "["
             count = fson_value_count(this)
+            element => this%children
             do i = 1, count
-                ! get the element
-                element => fson_value_get(this, i)
-                ! recursive print of the element
-                call fson_value_print(element, tab + 1)
-                ! print the separator if required
-                if (i < count) then
-                    print *, ","
-                end if
+               ! recursive print of the element
+               call fson_value_print(element, tab + 1)
+               ! print the separator if required
+               if (i < count) then
+                  print *, ","
+               end if
+               element => element%next
             end do
             print *, repeat(" ", spaces), "]"
         case (TYPE_NULL)
@@ -300,7 +301,7 @@ contains
                 print *, repeat(" ", spaces), "false"
             end if
         case (TYPE_INTEGER)
-            print *, repeat(" ", spaces), this % value_integer
+            print *, repeat(" ", spaces), this % value_long_integer
         case (TYPE_REAL)
             print *, repeat(" ", spaces), this % value_double
         end select

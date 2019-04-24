@@ -123,7 +123,7 @@ CONTAINS
                + prd%coef(prd%cwl)%samplesz(1,tzi+1,m,n)*tz)*phase
 
           ! For far elements, add singular parts.
-          IF(near==.FALSE. .AND. ABS(nn)<2 .AND. ABS(mm)<2) THEN
+          IF((near .EQV. .FALSE.) .AND. ABS(nn)<2 .AND. ABS(mm)<2) THEN
              IF(prd%oblique) THEN
                 phase_inc2 = EXP((0,1)*(prd%coef(prd%cwl)%k0x*rho(1) &
                      + prd%coef(prd%cwl)%k0y*rho(2)))
@@ -254,7 +254,7 @@ CONTAINS
           END WHERE
 
           ! For far elements, add singular parts.
-          IF(near==.FALSE. .AND. ABS(nn)<2 .AND. ABS(mm)<2) THEN
+          IF((near .EQV. .FALSE.) .AND. ABS(nn)<2 .AND. ABS(mm)<2) THEN
              IF(prd%oblique) THEN
                 phase_inc2 = EXP((0,1)*(prd%coef(prd%cwl)%k0x*rho(1) &
                      + prd%coef(prd%cwl)%k0y*rho(2)))
