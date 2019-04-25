@@ -9,33 +9,30 @@ MODULE data
   IMPLICIT NONE
 
   ! electric and magnetic fields in 3d
-  TYPE field3d_type
-    COMPLEX(KIND=dp), ALLOCATABLE, DIMENSION(:,:,:)   :: ex, ey, ez, erho, ephi
-    COMPLEX(KIND=dp), ALLOCATABLE, DIMENSION(:,:,:)   :: hx, hy, hz, hrho, hphi
-  END TYPE field3d_type
+  TYPE field_type
+    CHARACTER(LEN=3)                  :: coord
+    COMPLEX(KIND=dp), DIMENSION(3)    :: e, h
+  END TYPE field_type
+
+  ! node coordinate in 3d, represented in Cartesian coordinate system
+  TYPE node_type
+    REAL(KIND=dp), DIMENSION(3)    :: p
+  END TYPE node_type
 
   ! data structure in the focal region (3d)
-  TYPE grid3d_type
-    INTEGER                                           :: nx, ny, nz
-    REAL(KIND=dp)                                     :: xa, xb, ya, yb, za, zb
-    REAL(KIND=dp), ALLOCATABLE, DIMENSION(:)          :: x, y, z
-    REAL(KIND=dp), ALLOCATABLE, DIMENSION(:,:,:)      :: gridx
-    REAL(KIND=dp), ALLOCATABLE, DIMENSION(:,:,:)      :: gridy
-    REAL(KIND=dp), ALLOCATABLE, DIMENSION(:,:,:)      :: gridz
-    COMPLEX(KIND=dp), ALLOCATABLE, DIMENSION(:,:,:,:,:) :: cj
-    COMPLEX(KIND=dp), ALLOCATABLE, DIMENSION(:,:,:,:,:) :: cjs0c0
-    COMPLEX(KIND=dp), ALLOCATABLE, DIMENSION(:,:,:,:,:) :: cjs0c1
-    COMPLEX(KIND=dp), ALLOCATABLE, DIMENSION(:,:,:,:,:) :: cjs1c0
-  END TYPE grid3d_type
+  TYPE grid_type
+    CHARACTER(LEN=3)                  :: coord
+    INTEGER                           :: n1, n2, n3! number of points
+    REAL(KIND=dp), DIMENSION(2)       :: x1, x2, x3! interval [x1(1) x1(2)]
+  END TYPE grid_type
 
   TYPE focal3d_type
-    CHARACTER(LEN=256)                                :: label
-    INTEGER                                           :: isrc
-    ! REAL(KIND=dp), ALLOCATABLE, DIMENSION(:)          :: wl
-    REAL(KIND=dp)                                     :: wl
-    TYPE(grid3d_type)                                 :: grid
-    TYPE(field3d_type)                                :: field
-    ! TYPE(field3d_type), ALLOCATABLE, DIMENSION(:)     :: field ! field(nwl)
+    CHARACTER(LEN=256)                            :: label
+    INTEGER                                       :: isrc
+    REAL(KIND=dp)                                 :: wl
+    TYPE(grid_type)                               :: grid
+    TYPE(node_type), ALLOCATABLE, DIMENSION(:)    :: nodes
+    TYPE(field_type), ALLOCATABLE, DIMENSION(:)   :: field
   END TYPE focal3d_type
 
   !----data type for greenprd----
@@ -524,8 +521,8 @@ MODULE data
      TYPE (pupil_type)    :: pupil
 
      ! data of focused beam
-     ! TYPE (grid3d_type), DIMENSION(:), ALLOCATABLE :: focal ! multiple wavelengths if needed
-     TYPE (grid3d_type)  :: focal
+     ! TYPE (grid_type), DIMENSION(:), ALLOCATABLE :: focal ! multiple wavelengths if needed
+     TYPE (grid_type)  :: focal
 
      ! Source data.
      TYPE(srcdata), DIMENSION(:), ALLOCATABLE :: src
@@ -561,12 +558,6 @@ MODULE data
     TYPE(mesh_container)  :: elements
   END TYPE mesh_type
 
-  TYPE quad_type
-    INTEGER               :: dim, id
-    CHARACTER(LEN=16)     :: rule
-    TYPE(quad_data)       :: qd
-  END TYPE quad_type
-
   ! model->geom->domain
   TYPE domain_type
     INTEGER                             :: media    ! media index
@@ -574,10 +565,9 @@ MODULE data
     INTEGER, DIMENSION(:), ALLOCATABLE  :: volume   ! volume indices
     ! The submesh of the domain. May contain also a volume mesh.
     TYPE(mesh_container)                :: elements
-    ! Surface/volume specific quadrature data
-    ! In principle, possible to set separate quadrature rule for each surface.
-    ! In principle, possible to set separate quadrature rule for each volume.
-    TYPE(quad_type), DIMENSION(:), ALLOCATABLE  :: quad
+    ! domain specified surface/volume quadrature rule
+    CHARACTER(LEN=16)                   :: qdrule_tri, qdrule_tetra
+    TYPE(quad_data)                     :: qd_tri, qd_tetra
   END TYPE domain_type
 
   ! model->geom
@@ -585,11 +575,6 @@ MODULE data
   TYPE geom_type
     TYPE(mesh_type)                               :: mesh   ! loaded mesh
     TYPE(domain_type), DIMENSION(:), ALLOCATABLE  :: domain ! contains submesh
-    ! Global quadrature data.
-    ! Triangular surface quadrature rule for surface mesh elements.
-    ! Tetrahedral volume quadrature rule for volume mesh elements.
-    ! Use global quadrature rule except for the surface/volume specific ones.
-    TYPE(quad_type), DIMENSION(2:3)               :: quad ! qd_tri, qd_tetra
   END TYPE geom_type
 
   ! model->physics->group
@@ -640,6 +625,7 @@ MODULE data
     CHARACTER(LEN=12)                             :: poles
 
   END TYPE solver_type
+
   ! model->simulation
   TYPE simulation_type
     TYPE(solver_type)                             :: solver
@@ -652,7 +638,20 @@ MODULE data
 
   ! model->solution->base
   TYPE base_type
-    LOGICAL               :: save
+    LOGICAL                                             :: save
+    COMPLEX(KIND=dp)                                    :: zwl ! at what wavelength
+    ! Solution vector.
+    ! First dimension denotes basis coefficients of (J,M).
+    ! Second dimension denotes sub-problems related to group representations.
+    ! Third dimension denotes excitation source.
+    COMPLEX (KIND=dp), DIMENSION(:,:,:), ALLOCATABLE    :: x, nlx
+
+    ! Basis coefficients for jumps in M and J due to surface sources.
+    ! 1st dim: coefficients of M and J jump expansions,
+    ! 2nd dim: domain,
+    ! 3rd dim: group representation,
+    ! 4th dim: excitation source.
+    COMPLEX (KIND=dp), DIMENSION(:,:,:,:), ALLOCATABLE :: src_coef
 
   END TYPE base_type
 
@@ -676,10 +675,12 @@ MODULE data
 
   ! model->solution
   TYPE solution_type
-    TYPE(base_type)       :: base
-    TYPE(derived_type)    :: derived
-    TYPE(focal3d_type), DIMENSION(:), ALLOCATABLE :: focal ! array of planes
-    TYPE(mode_type), DIMENSION(:), ALLOCATABLE    :: mode ! array of zwl
+    ! array, one elelment at one wavelength
+    TYPE(base_type),DIMENSION(:), ALLOCATABLE     :: base
+    TYPE(derived_type), DIMENSION(:), ALLOCATABLE :: derived
+    TYPE(mode_type), DIMENSION(:), ALLOCATABLE    :: mode
+    ! array, one elelment at one plane
+    TYPE(focal3d_type), DIMENSION(:), ALLOCATABLE :: focal
   END TYPE solution_type
 
   ! model

@@ -8,6 +8,7 @@ MODULE solver
   USE data
   USE material
   USE modes
+  USE scattering
   USE sysmat
   USE source
   USE bc
@@ -25,70 +26,181 @@ CONTAINS
     IMPLICIT NONE
     TYPE(model_type), INTENT(INOUT)       :: model
 
-    IF ( model%simulation%solver%name == 'source' ) THEN
-    ! calculate background field, i.e. solver == source
-      ! check required parameters
-      IF ( ALLOCATED(model%physics%source) .EQV. .FALSE. ) THEN
-         WRITE(*,*) 'Set up source parameters in the node'//  &
-                    'model%physics%source before solving!'
-         RETURN
-      END IF
+    SELECT CASE ( TRIM(model%simulation%solver%name) )
 
-      IF ( ALLOCATED(model%physics%media) .EQV. .FALSE. ) THEN
-         WRITE(*,*) 'Set up media parameters in the node'// &
-                    'model%physics%media before solving!'
-         RETURN
-      END IF
+      ! calculate background field
+      CASE ('source')
+        ! check required parameters
+        IF ( ALLOCATED(model%physics%source) .EQV. .FALSE. ) THEN
+           WRITE(*,*) 'Set up source parameters in the node'//  &
+                      'model%physics%source before solving!'
+           RETURN
+        END IF
 
-      IF ( ALLOCATED(model%solution%focal) .EQV. .FALSE. ) THEN
-         WRITE(*,*) 'Set up grid in focal region in the node'// &
-                    'model%solution%focal before solving!'
-         RETURN
-      END IF
+        IF ( ALLOCATED(model%physics%media) .EQV. .FALSE. ) THEN
+           WRITE(*,*) 'Set up media parameters in the node'// &
+                      'model%physics%media before solving!'
+           RETURN
+        END IF
 
-      WRITE(*,*) '  Calculating the incident beam'
-      CALL solve_source(  model%name,               &
-                          model%physics%media(0:1), & ! only for two domains
-                          model%physics%source,     &
-                          model%solution%focal )
+        IF ( ALLOCATED(model%solution%focal) .EQV. .FALSE. ) THEN
+           WRITE(*,*) 'Set up grid in focal region in the node'// &
+                      'model%solution%focal before solving!'
+           RETURN
+        END IF
 
-    ELSE IF ( model%simulation%solver%name == 'mode' ) THEN
-    ! calculate the eigen modes at complex frequency
-      ! check required parameters
-      IF ( LEN_TRIM(ADJUSTL(model%geom%mesh%file)) == 0 ) THEN
-         WRITE(*,*) 'Set up mesh file in the node model%geom%mesh before solving!'
-         RETURN
-      END IF
+        WRITE(*,*) '  Calculating the incident beam'
+        CALL solve_source(  model%name,               &
+                            model%physics%media(0),   &! the surrounding media
+                            model%physics%source,     &
+                            model%solution%focal )
 
-      IF ( ALLOCATED(model%geom%domain) .EQV. .FALSE. ) THEN
-         WRITE(*,*) 'Set up domain in the node model%geom%domain before solving!'
-         RETURN
-      END IF
+      ! calculate the eigen modes at complex frequency
+      CASE ('mode')
+        ! check required parameters
+        IF ( LEN_TRIM(ADJUSTL(model%geom%mesh%file)) == 0 ) THEN
+           WRITE(*,*) 'Set up mesh file in the node model%geom%mesh before solving!'
+           RETURN
+        END IF
 
-      IF ( ALLOCATED(model%physics%media) .EQV. .FALSE. ) THEN
-         WRITE(*,*) 'Set up media parameters in the node'// &
-                    'model%physics%media before solving!'
-         RETURN
-      END IF
+        IF ( ALLOCATED(model%geom%domain) .EQV. .FALSE. ) THEN
+           WRITE(*,*) 'Set up domain in the node model%geom%domain before solving!'
+           RETURN
+        END IF
 
-      IF ( ALLOCATED(model%simulation%zwl) .EQV. .FALSE. ) THEN
-         WRITE(*,*) 'Set up complex wavelength for mode solver'// &
-                    'model%simulation%zwl before solving!'
-         RETURN
-      END IF
+        IF ( ALLOCATED(model%physics%media) .EQV. .FALSE. ) THEN
+           WRITE(*,*) 'Set up media parameters in the node'// &
+                      'model%physics%media before solving!'
+           RETURN
+        END IF
 
-      CALL prepare_mesh(  model%geom )
-      CALL prepare_quad(  model%geom%domain )
-      CALL prepare_group( model%physics%group )
-      CALL solve_mode(  model%name,                 &
-                        model%geom,                 &
-                        model%physics%group%action, &
-                        model%physics%media,        &
-                        model%simulation,           &
-                        model%solution%mode )
+        IF ( ALLOCATED(model%simulation%zwl) .EQV. .FALSE. ) THEN
+           WRITE(*,*) 'Set up complex wavelength for mode solver'// &
+                      'model%simulation%zwl before solving!'
+           RETURN
+        END IF
 
-    END IF
+        CALL prepare_mesh(  model%geom )
+        CALL prepare_quad( model%geom%domain )
+        CALL prepare_group( model%physics%group )
+        CALL solve_mode(  model%name,                 &
+                          model%geom,                 &
+                          model%physics%group%action, &
+                          model%physics%media,        &
+                          model%simulation,           &
+                          model%solution%mode )
+
+      ! solve the EM-wave scattering problem
+      CASE ('scattering')
+        ! check required parameters
+        IF ( LEN_TRIM(ADJUSTL(model%geom%mesh%file)) == 0 ) THEN
+           WRITE(*,*) 'Set up mesh file in the node model%geom%mesh before solving!'
+           RETURN
+        END IF
+
+        IF ( ALLOCATED(model%geom%domain) .EQV. .FALSE. ) THEN
+           WRITE(*,*) 'Set up domain in the node model%geom%domain before solving!'
+           RETURN
+        END IF
+
+        IF ( ALLOCATED(model%physics%media) .EQV. .FALSE. ) THEN
+           WRITE(*,*) 'Set up media parameters in the node'// &
+                      'model%physics%media before solving!'
+           RETURN
+        END IF
+
+        IF ( ALLOCATED(model%physics%source) .EQV. .FALSE. ) THEN
+           WRITE(*,*) 'Set up source parameters in the node'//  &
+                      'model%physics%source before solving!'
+           RETURN
+        END IF
+
+        IF ( ALLOCATED(model%simulation%zwl) .EQV. .FALSE. ) THEN
+           WRITE(*,*) 'Set up complex wavelength for mode solver'// &
+                      'model%simulation%zwl before solving!'
+           RETURN
+        END IF
+
+        CALL prepare_mesh(  model%geom )
+        CALL prepare_quad( model%geom%domain )
+        CALL prepare_group( model%physics%group )
+        CALL solve_scattering ( model%name,                 &
+                          model%geom,                 &
+                          model%physics%group%action, &
+                          model%physics%media,        &
+                          model%physics%source,       &
+                          model%simulation,           &
+                          model%solution%base )
+
+      CASE DEFAULT
+        WRITE(*,*) "Not supported solving method."
+        STOP
+    END SELECT
   END SUBROUTINE solve
+
+  SUBROUTINE solve_scattering (mname, geom, ga, media, source, simulation, base )
+    IMPLICIT NONE
+    CHARACTER(LEN=*), INTENT(IN)                        :: mname
+    TYPE(geom_type), INTENT(IN)                         :: geom
+    TYPE(group_action), DIMENSION(:), INTENT(IN)        :: ga
+    TYPE(media_type), DIMENSION(0:), INTENT(IN)         :: media
+    TYPE(source_type), DIMENSION(:), INTENT(IN)         :: source
+    TYPE(simulation_type), INTENT(IN)                   :: simulation
+    TYPE(base_type), DIMENSION(:), INTENT(INOUT)        :: base
+
+    TYPE(domain_type), DIMENSION(:), ALLOCATABLE        :: domain
+    COMPLEX(KIND=dp)    :: eps, mu, omega, ri
+    INTEGER             :: iwl, nwl, idom, imat, imode, nmode, isrc, nsrc
+    REAL(KIND=dp)       :: time_begin, time_end, time_loop
+    CHARACTER(LEN=256)  :: filename
+
+    nwl = SIZE(simulation%zwl)
+    nsrc = SIZE(source)
+
+    WRITE(*,*) '--- Begin wavelength scanning ---'
+    DO iwl = simulation%iwl, nwl
+      time_loop = 0.0_dp
+      omega = 2.0_dp*pi*c0/simulation%zwl(iwl)
+      ri = get_ri( media(geom%domain(0)%media)%ri, REAL(simulation%zwl(iwl), KIND=dp) )
+
+      ! Print some information.
+      WRITE(*,'(A,'//fmt_cmplx//',SS, A,I0,A,I0,A)') ' Wavelength: ', &
+        simulation%zwl(iwl), ' [m] (', iwl, ' of ', nwl, ')'
+
+      ! Print material properties of each domain
+      DO idom = 0, (SIZE(geom%domain(0:))-1)
+        imat = geom%domain(idom)%media
+        eps = media_eps( media(imat), simulation%zwl(iwl) )
+        mu = media_mu( media(imat), simulation%zwl(iwl) )
+        WRITE(*,'(A,I0,A,'//fmt_cmplx//'SS)') &
+          ' - Relative permittivity (epsilon) of medium ', idom, ': ', eps
+        WRITE(*,'(A,I0,A,'//fmt_cmplx//'SS)') &
+          ' - Relative permeability (mu) of medium ', idom, ': ', mu
+      END DO ! idom
+
+      ! Solve linear scattering problem
+      CALL CPU_TIME( time_begin )
+      CALL scattering_linear( geom%domain, ga, media, source, simulation%zwl(iwl), base(iwl) )
+      CALL CPU_TIME( time_end )
+
+      time_loop = time_loop + time_end-time_begin
+      WRITE(*,*) 'Wall-clock time:'
+      WRITE(*,*) sec_to_str( time_end-time_begin )
+      WRITE(*,*) 'Wall-clock time (loop):'
+      WRITE(*,*) sec_to_str( time_loop )
+
+      ! save the near field or not
+      IF (base(iwl)%save) THEN
+        DO isrc = 1, nsrc
+          filename = TRIM(mname)//'-iwl'//TRIM(num2str(iwl))//'-isrc'//TRIM(num2str(isrc))//'.msh'
+          CALL field_mesh(filename, geom%domain(0)%elements, geom%mesh%scale, &
+            geom%domain(0)%elements%nedges, base(iwl)%x(:,:,isrc), ga, omega, ri)
+        END DO
+      END IF
+
+    END DO ! iwl
+
+  END SUBROUTINE solve_scattering
 
   SUBROUTINE solve_mode( mname, geom, ga, media, simulation, mode )
     IMPLICIT NONE
@@ -105,7 +217,6 @@ CONTAINS
     CHARACTER(LEN=256)  :: filename
     REAL(KIND=dp)       :: time_begin, time_end, time_loop
     COMPLEX(KIND=dp), DIMENSION(:), ALLOCATABLE :: eps_tmp
-
 
     nwl = SIZE(simulation%zwl)
     nmode = 12
@@ -180,49 +291,68 @@ CONTAINS
 
   END SUBROUTINE solve_mode
 
-  ! solve the focal field in focal region
+  ! solve the source, i.e., input field
   SUBROUTINE solve_source(mname, media, source, focal)
     CHARACTER(LEN=*), INTENT(IN)                        :: mname
-    TYPE(media_type), DIMENSION(0:1), INTENT(IN)        :: media
+    TYPE(media_type), INTENT(IN)                        :: media
     TYPE(source_type), DIMENSION(:), INTENT(IN)         :: source
     TYPE(focal3d_type), DIMENSION(:), INTENT(INOUT)     :: focal
 
-    ! ri1: refractive index of medium 1, before focusing lens
-    ! ri2: refractive index of medium 2, after focusing lens
-    COMPLEX (KIND=dp)                     :: ri1, ri2
-    INTEGER                               :: ifocal, nfocal, isrc, nx, ny, nz
-    REAL(KIND=dp)                         :: wl
-    CHARACTER(LEN=256)                    :: file_h5
+    COMPLEX (KIND=dp)   :: ri
+    INTEGER             :: ifocal, nfocal, isrc, n1, n2, n3
+    REAL(KIND=dp)       :: wl
+    CHARACTER(LEN=256)  :: file_h5
+    TYPE(field_type)    :: field
+    TYPE(grid_type)     :: grid
+    INTEGER             :: ndo, ido, inode, nnode
+    REAL(KIND=dp), DIMENSION(3)     :: pt
+    COMPLEX(KIND=dp), DIMENSION(3)  :: e, h
 
     ! An array of focal field calculations for an array of sources
     nfocal = SIZE(focal)
     DO ifocal = 1, nfocal
       isrc = focal(ifocal)%isrc
       wl = focal(ifocal)%wl
-      ri1 = get_ri(media(0)%ri, wl)
-      ri2 = get_ri(media(1)%ri, wl)
+      ri = get_ri(media%ri, wl)
+      grid = focal(ifocal)%grid
+      n1 = focal(ifocal)%grid%n1
+      n2 = focal(ifocal)%grid%n2
+      n3 = focal(ifocal)%grid%n3
 
-      ny = focal(ifocal)%grid%ny
-      nx = focal(ifocal)%grid%nx
-      nz = focal(ifocal)%grid%nz
-!      ALLOCATE( focal(ifocal)%field%ex(ny, nx, nz) )
-!      ALLOCATE( focal(ifocal)%field%ey(ny, nx, nz) )
-      ALLOCATE( focal(ifocal)%field%erho(ny, nx, nz) )
-      ALLOCATE( focal(ifocal)%field%ephi(ny, nx, nz) )
-      ALLOCATE( focal(ifocal)%field%ez(ny, nx, nz) )
-!      ALLOCATE( focal(ifocal)%field%hx(ny, nx, nz) )
-!      ALLOCATE( focal(ifocal)%field%hy(ny, nx, nz) )
-      ALLOCATE( focal(ifocal)%field%hrho(ny, nx, nz) )
-      ALLOCATE( focal(ifocal)%field%hphi(ny, nx, nz) )
-      ALLOCATE( focal(ifocal)%field%hz(ny, nx, nz) )
+      nnode = SIZE(focal(ifocal)%nodes,1)
 
-      CALL focal_field( source(isrc)%focus, wl, ri1, ri2, &
-                        focal(ifocal)%grid, focal(ifocal)%field)
+      ALLOCATE( focal(ifocal)%field(nnode) )
+      
+      ! calculate the field
+      WRITE(*,*) '    Field calculation is running ...'
+      ndo = nnode
+      ido = 0
+      !$OMP PARALLEL DEFAULT(PRIVATE)&
+      !$OMP SHARED(source, isrc, wl, ri, grid, field, ido, ndo, nnode)
+      !$OMP DO SCHEDULE(STATIC)
+      DO inode = 1, nnode
+        pt = focal(ifocal)%nodes(inode)%p
 
+        CALL source_field( source(isrc), wl, ri, pt, e, h)
+
+        focal(ifocal)%field(nnode)%e = e
+        focal(ifocal)%field(nnode)%h = h
+
+        ! update the counter only by a single thread at a time
+        !$OMP ATOMIC UPDATE
+        ido = ido + 1
+        !$OMP END ATOMIC
+        ! show progress
+        CALL show_progress(ido, ndo)
+      END DO! inode=
+      !$OMP END DO
+      !$OMP END PARALLEL
+      WRITE(*,*) '    Field calculation is finished.'
+      
       ! save focal field to hdf5 file
       file_h5 = TRIM(mname) // '-focal-' //    &
                 TRIM(focal(ifocal)%label) //'.h5'
-      CALL write_field_h5(TRIM(file_h5), focal(ifocal)%grid, focal(ifocal)%field, 'pol' )
+      CALL write_field_h5(TRIM(file_h5), focal(ifocal)%grid, focal(ifocal)%field, 'cyl' )
 
     END DO! ifocal
 
@@ -338,7 +468,7 @@ CONTAINS
 
        ri = b%media(b%domains(1)%medium_index)%prop(n)%ri
        DO l=1,nsrc
-          CALL srcvec(b%domains(1)%mesh, b%mesh%nedges, omega, ri, b%ga, b%src(l),&
+          CALL srcvec_b(b%domains(1)%mesh, b%mesh%nedges, omega, ri, b%ga, b%src(l),&
                b%qd_tri, b%sols(n)%x(:,:,l))
        END DO
        WRITE(*,*) sec_to_str(timer_end())
@@ -615,44 +745,6 @@ CONTAINS
     WRITE(*,*) '--- End wavelength batch ---'
 
   END SUBROUTINE solve_batch
-
-  ! Solves a linear system of equations for all group representations
-  ! as described by matrices A and source vectors x.
-  ! Removes and copies elements of A and x in order to enforce
-  ! boundary conditions.
-  SUBROUTINE solve_systems(mesh, ga, phdx, phdy, A, x)
-    TYPE(mesh_container), INTENT(IN) :: mesh
-    TYPE(group_action), DIMENSION(:), INTENT(IN) :: ga
-    COMPLEX (KIND=dp), INTENT(IN) :: phdx, phdy
-    COMPLEX (KIND=dp), DIMENSION(:,:,:), INTENT(INOUT) :: A
-    COMPLEX (KIND=dp), DIMENSION(:,:,:), INTENT(INOUT) :: x
-
-    INTEGER :: dim, r, nga
-    INTEGER, DIMENSION(mesh%nedges*2) :: id
-    COMPLEX (KIND=dp), DIMENSION(mesh%nedges*2) :: phase
-
-    nga = SIZE(ga)
-
-    ! Go through all representations.
-    DO r=1,nga
-       ! Determine boundary conditions arising from symmetry and
-       ! periodicity. BC information is stored in id and phase.
-       CALL edge_bc(mesh, ga, phdx, phdy, r, id, phase)
-
-       ! Enforce the boundary conditions on matrix A and source x.
-       CALL resolve_system_dependencies(A(:,:,r), x(:,r,:), id, phase)
-       CALL reduce_system(A(:,:,r), x(:,r,:), dim, id)
-
-       ! Solve the remaining linear system of dimension dim.
-       CALL solve_multi_linsys(A(1:dim,1:dim,r), x(1:dim,r,:))
-
-       ! Expand the solution vector.
-       ! If some elements of x were deemed zero or lin. dep.
-       ! put these values into the solution vectors and make
-       ! its size 2*nedges.
-       CALL expand_solution(dim, id, phase, x(:,r,:))
-    END DO
-  END SUBROUTINE solve_systems
 
   ! Determines the 'primed' permittivity for each face of the surface mesh.
   ! This permittivity if that of the complement domain just outside the boundary.

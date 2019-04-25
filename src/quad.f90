@@ -272,20 +272,11 @@ CONTAINS
   SUBROUTINE prepare_quad( domain )
     TYPE(domain_type), DIMENSION(-1:), INTENT(INOUT) :: domain
 
-    INTEGER   :: idom, iquad
+    INTEGER   :: idom
 
-    domain(-1)%quad(2)%qd = tri_quad_data( TRIM(domain(-1)%quad(2)%rule) )
-    domain(-1)%quad(3)%qd = tetra_quad_data( TRIM(domain(-1)%quad(3)%rule) )
-    DO idom = 0, (SIZE(domain(0:))-1)
-      DO iquad = 1, SIZE(domain(idom)%quad)
-        IF ( domain(idom)%quad(iquad)%dim == 2 ) THEN
-          domain(idom)%quad(iquad)%qd = &
-            tri_quad_data( TRIM(domain(idom)%quad(iquad)%rule) )
-        ELSE IF ( domain(idom)%quad(iquad)%dim == 3 ) THEN
-          domain(idom)%quad(iquad)%qd = &
-            tetra_quad_data( TRIM(domain(idom)%quad(iquad)%rule) )
-        END IF
-      END DO
+    DO idom = -1, UBOUND(domain,1)
+      domain(idom)%qd_tri = tri_quad_data( TRIM(domain(idom)%qdrule_tri) )
+      domain(idom)%qd_tetra = tetra_quad_data( TRIM(domain(idom)%qdrule_tetra) )
     END DO
   END SUBROUTINE prepare_quad
 

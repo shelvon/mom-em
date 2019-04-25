@@ -154,7 +154,7 @@ CONTAINS
     REAL (KIND=dp), ALLOCATABLE, DIMENSION(:,:,:), INTENT(OUT)  :: gridy
     REAL (KIND=dp), ALLOCATABLE, DIMENSION(:,:,:), INTENT(OUT)  :: gridz
 
-    INTEGER                                                     :: nx, ny, nz
+    INTEGER   :: nx, ny, nz
 
     nx = SIZE(x)
     ny = SIZE(y)
@@ -167,6 +167,84 @@ CONTAINS
     gridy=(SPREAD(SPREAD(y,2,nx),3,nz))
     gridz=(SPREAD(SPREAD(z,1,nx),1,ny))
   END SUBROUTINE meshgrid
+
+  ! Generate 1d vector containing all points in a 3d grid
+  SUBROUTINE generate_nodes(n1,n2,n3, x1, x2, x3, nodes, coord_set)
+    INTEGER, INTENT(IN)       :: n1,n2,n3
+    REAL(KIND=dp), DIMENSION(2), INTENT(IN) :: x1, x2, x3
+    CHARACTER(LEN=3), INTENT(IN), OPTIONAL :: coord_set
+    TYPE(node_type), DIMENSION(1:n1*n2*n3), INTENT(OUT)  :: nodes
+
+    CHARACTER(LEN=3)            :: coord
+    REAL(KIND=dp), DIMENSION(3) :: p
+
+    INTEGER   :: i,j,k, inode
+
+    IF (PRESENT(coord_set)) THEN
+      coord = coord_set
+    ELSE
+      coord = 'car'
+    END IF
+
+    inode = 1
+    DO i = 1, n1
+      DO j = 1, n2
+        DO k = 1, n3
+          p(1) = x1(1)+REAL(i-1,KIND=dp)/(x1(2)-x1(1))
+          p(2) = x2(1)+REAL(j-1,KIND=dp)/(x2(2)-x2(1))
+          p(3) = x3(1)+REAL(k-1,KIND=dp)/(x3(2)-x3(1))
+          nodes(inode)%p = all2car(coord, p)
+          inode = inode+1
+        END DO
+      END DO
+    END DO
+
+  END SUBROUTINE generate_nodes
+
+  FUNCTION all2car(coord, p) RESULT(res)
+    CHARACTER(LEN=3), INTENT(IN)              :: coord
+    REAL(KIND=dp), DIMENSION(3), INTENT(IN)   :: p
+
+    REAL(KIND=dp), DIMENSION(3)   :: res
+
+    SELECT CASE (coord)
+      CASE ('car')
+        res = p
+      CASE ('cyl')
+        res = cyl2car(p)
+      CASE ('sph')
+        res = sph2car(p)
+      CASE DEFAULT
+        WRITE(*,*) 'Not recognized coordinate system!'
+    END SELECT
+
+  END FUNCTION all2car
+
+  FUNCTION cyl2car(p) RESULT(res)
+    REAL(KIND=dp), DIMENSION(3), INTENT(IN)   :: p
+
+    REAL(KIND=dp), DIMENSION(3)   :: res
+    REAL(KIND=dp), DIMENSION(3,3) :: R
+
+    R = RESHAPE( (/COS(p(2)), SIN(p(2)), 0.0_dp, &
+                  -p(1)*SIN(p(2)), p(1)*COS(p(2)), 0.0_dp, &
+                  0.0_dp, 0.0_dp, 1.0_dp/), (/3,3/) )
+
+    res=MATMUL(R,p)
+  END FUNCTION cyl2car
+
+  FUNCTION sph2car(p) RESULT(res)
+    REAL(KIND=dp), DIMENSION(3), INTENT(IN)   :: p
+
+    REAL(KIND=dp), DIMENSION(3)   :: res
+    REAL(KIND=dp), DIMENSION(3,3) :: R
+
+    R = RESHAPE( (/SIN(p(2))*COS(p(3)), SIN(p(2))*SIN(p(3)), COS(p(2)), &
+                  p(1)*COS(p(2))*COS(p(3)), p(1)*COS(p(2))*SIN(p(3)), -p(1)*SIN(p(2)), &
+                  -p(1)*SIN(p(2))*SIN(p(3)), p(1)*SIN(p(2))*COS(p(3)), 0.0_dp/), (/3,3/) )
+
+    res=MATMUL(R,p)
+  END FUNCTION sph2car
 
   ! Reads a matrix from file.
   SUBROUTINE get_matrix(filename, mat, nrows, ncols)

@@ -32,6 +32,7 @@ CONTAINS
     INTEGER                         :: idom, isurf, lenstr, nvol
     INTEGER, DIMENSION(:), POINTER  :: vol_ids
     CHARACTER(LEN=256)              :: filename
+    TYPE(mesh_container), DIMENSION(:), ALLOCATABLE :: submeshes
 
     ! load mesh elements from .msh file
     geom%mesh%elements = load_mesh( geom%mesh%file )
@@ -68,12 +69,14 @@ CONTAINS
 
     END DO
 
-    CALL determine_edge_couples( geom%mesh%elements, 1D-12 )
-    CALL submesh_edge_connectivity( geom%mesh%elements,  &
-                                    geom%domain(0:)%elements )
-    CALL orient_basis( geom%mesh%elements, geom%domain(0:)%elements )
-
+    CALL determine_edge_couples( geom%mesh%elements, tol )
     geom%domain(-1)%elements = geom%mesh%elements
+
+    submeshes = geom%domain(0:)%elements
+    CALL submesh_edge_connectivity( geom%mesh%elements, submeshes )
+    CALL orient_basis( geom%mesh%elements, submeshes )
+    geom%domain(0:)%elements = submeshes
+
   END SUBROUTINE prepare_mesh
 
   FUNCTION has_mesh_bnd(mesh, bnd) RESULT(res)

@@ -208,7 +208,7 @@ CONTAINS
     CALL diff_fields(mesh, ga, nf, x(:,nf), nedgestot, omega, ri, prd, dir*eval_dist, i, j, qd, e, h)
 
     IF(addsrc .AND. i==0 .AND. j==0) THEN
-       CALL src_fields(src, omega, ri, dir*eval_dist, einc, hinc)
+       CALL src_fields_b(src, omega, ri, dir*eval_dist, einc, hinc)
        
        e = e + einc
        h = h + hinc
@@ -309,7 +309,7 @@ CONTAINS
 
           DO nsrc=1,SIZE(src)
              IF(addsrc) THEN
-                CALL src_fields(src(nsrc), omega, ri, pt, einc, hinc)
+                CALL src_fields_b(src(nsrc), omega, ri, pt, einc, hinc)
                 
                 e(:,nsrc) = e(:,nsrc) + einc
                 h(:,nsrc) = h(:,nsrc) + hinc

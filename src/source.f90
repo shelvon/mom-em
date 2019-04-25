@@ -8,6 +8,7 @@
 ! function and s is a source excitation.
 MODULE source
   USE bessel
+  USE focal
   USE aux
   USE mesh
   USE symmetry
@@ -35,6 +36,25 @@ MODULE source
        focustype_azimut = 5
 
 CONTAINS
+  SUBROUTINE source_field(source, wl, ri, pt, e, h)
+    TYPE(source_type), INTENT(IN)           :: source
+    REAL(KIND=dp), INTENT(IN)               :: wl
+    COMPLEX(KIND=dp), INTENT(IN)            :: ri
+    REAL(KIND=dp), DIMENSION(3), INTENT(IN) :: pt
+    COMPLEX(KIND=dp), DIMENSION(3), INTENT(OUT) :: e, h
+
+    REAL(KIND=dp)     :: omega
+    omega = 2.0_dp*pi*c0/wl
+
+    SELECT CASE (source%type)
+      CASE ('focus')
+        CALL focal_field(source%focus, wl, ri, pt, e, h)
+      CASE ('pw')
+        CALL pw_fields(source%pw%theta, source%pw%phi, source%pw%psi, &
+          omega, ri, pt, e, h)
+    END SELECT
+  END SUBROUTINE source_field
+
   ! Electric field of plane-wave with polarization pv,
   ! wave-vector dir*k evaluated at point r.
   FUNCTION pw_efield(pv, dir, k, r) RESULT(efield)
@@ -59,14 +79,14 @@ CONTAINS
   ! Electric and magnetic field of a plane-wave with k-vector and
   ! polarization determined by the angles theta, phi and psi.
   SUBROUTINE pw_fields(theta, phi, psi, omega, ri, pt, ef, hf)
-    REAL (KIND=dp), INTENT(IN) :: theta, phi, psi, omega
-    COMPLEX (KIND=dp), INTENT(IN) :: ri
-    REAL (KIND=dp), DIMENSION(3), INTENT(IN) :: pt
+    REAL(KIND=dp), INTENT(IN) :: theta, phi, psi, omega
+    COMPLEX(KIND=dp), INTENT(IN) :: ri
+    REAL(KIND=dp), DIMENSION(3), INTENT(IN) :: pt
 
-    COMPLEX (KIND=dp), DIMENSION(3), INTENT(INOUT) :: ef, hf
+    COMPLEX(KIND=dp), DIMENSION(3), INTENT(INOUT) :: ef, hf
 
-    REAL (KIND=dp), DIMENSION(3) :: pol, dir
-    COMPLEX (KIND=dp) :: k
+    REAL(KIND=dp), DIMENSION(3) :: pol, dir
+    COMPLEX(KIND=dp) :: k
 
     dir = get_dir(theta, phi)
     pol = get_pol(theta, phi, psi)
@@ -105,12 +125,83 @@ CONTAINS
   ! source excitation function.
   ! mesh: boundary mesh of the domain where the source is defined in.
   ! nedgestot: total number of edges in the whole system.
-  ! omega: angular frequency
+  ! wl: wavelength
   ! ri: refractive index in the source domain.
   ! ga: group actions.
-  ! src: source parameters
+  ! source: source parameters
   ! q: the source vector for all group representations
-  SUBROUTINE srcvec(mesh, nedgestot, omega, ri, ga, src, qd, q)
+  SUBROUTINE srcvec(mesh, nedgestot, wl, ri, ga, source, qd, q)
+    TYPE(mesh_container), INTENT(IN)  :: mesh
+    INTEGER, INTENT(IN)               :: nedgestot
+    REAL(KIND=dp),INTENT(IN)          :: wl
+    COMPLEX(KIND=dp), INTENT(IN)      :: ri
+    TYPE(group_action), DIMENSION(:), INTENT(IN)      :: ga
+    TYPE(source_type), INTENT(IN)     :: source
+    TYPE(quad_data), INTENT(IN)       :: qd
+    COMPLEX(KIND=dp), DIMENSION(:,:), INTENT(INOUT)  :: q
+
+    INTEGER       :: nweights, m, p, r, index, nr
+    REAL(KIND=dp) :: Am
+    COMPLEX(KIND=dp), DIMENSION(SIZE(ga))     :: Ie, Ih
+    REAL(KIND=dp), DIMENSION(3,qd%num_nodes)  :: qpm
+    REAL(KIND=dp), DIMENSION(3)               :: fm
+    COMPLEX(KIND=dp), DIMENSION(3,SIZE(ga),qd%num_nodes,mesh%nfaces) :: ef, hf
+
+    nweights = qd%num_nodes
+    q(:,:) = 0.0_dp
+
+    ! Pre-compute excitation fields in parallel.
+    !$OMP PARALLEL DEFAULT(PRIVATE)&
+    !$OMP SHARED(mesh, qd, nweights, source, wl, ri, ef, hf)
+    !$OMP DO SCHEDULE(STATIC)
+    DO m=1,mesh%nfaces
+      qpm = quad_tri_points(qd, m, mesh)
+
+      DO r=1,nweights
+        ! Compute the source excitation for all representations.
+        CALL source_field(source, wl, ri, qpm(:,r), ef(:,:,r,m), hf(:,:,r,m))
+      END DO
+    END DO
+    !$OMP END DO
+    !$OMP END PARALLEL
+
+    ! Go through faces of the mesh.
+    DO m=1,mesh%nfaces
+      qpm = quad_tri_points(qd, m, mesh)
+      Am = mesh%faces(m)%area
+
+      ! Go through edges of the current face.
+      DO p=1,3
+        Ie = 0.0_dp
+        Ih = 0.0_dp
+
+        ! Go through integration points on the face.
+        DO r=1,nweights
+           fm = rwg(qpm(:,r), m, p, mesh)
+
+           ! Compute inner-product integrands for each representation.
+           DO nr=1,SIZE(ga)
+              Ie(nr) = Ie(nr) + qd%weights(r)*dotc(CMPLX(fm,KIND=dp), ef(:,nr,r,m))
+              Ih(nr) = Ih(nr) + qd%weights(r)*dotc(CMPLX(fm,KIND=dp), hf(:,nr,r,m))
+           END DO
+        END DO
+
+        ! Get local index.
+        index = mesh%faces(m)%edge_indices(p)
+
+        ! Map to global index.
+        index = mesh%edges(index)%parent_index
+
+        DO nr=1,SIZE(ga)
+           q(index,nr) = q(index,nr) + Ie(nr)*Am
+
+           q(index+nedgestot,nr) = q(index+nedgestot,nr) + Ih(nr)*Am
+        END DO
+      END DO
+    END DO
+  END SUBROUTINE srcvec
+
+  SUBROUTINE srcvec_b(mesh, nedgestot, omega, ri, ga, src, qd, q)
     TYPE(mesh_container), INTENT(IN) :: mesh
     INTEGER, INTENT(IN) :: nedgestot
     REAL (KIND=dp) :: omega
@@ -127,7 +218,7 @@ CONTAINS
     COMPLEX (KIND=dp), DIMENSION(SIZE(ga)) :: Ie, Ih
     REAL (KIND=dp) :: Am, pm
     REAL (KIND=dp), DIMENSION(3,qd%num_nodes) :: qpm
-    REAL (KIND=dp), DIMENSION(3) :: fm, pos
+    REAL (KIND=dp), DIMENSION(3) :: fm
     LOGICAL :: print_info
 
     print_info = .FALSE.
@@ -221,7 +312,7 @@ CONTAINS
           END DO
        END DO
     END DO
-  END SUBROUTINE srcvec
+  END SUBROUTINE srcvec_b
 
   ! Computes source excitation fields in all given group representations.
   SUBROUTINE src_field_frags(src, omega, ri, ga, ptin, einc, hinc)
@@ -293,7 +384,7 @@ CONTAINS
 
   ! Computes the source at point pt. This is a simplified version of
   ! src_field_frags and does not consider symmetry representations.
-  SUBROUTINE src_fields(src, omega, ri, pt, einc, hinc)
+  SUBROUTINE src_fields_b(src, omega, ri, pt, einc, hinc)
     TYPE(srcdata), INTENT(IN) :: src
     REAL (KIND=dp), INTENT(IN) :: omega
     COMPLEX (KIND=dp), INTENT(IN) :: ri
@@ -328,7 +419,7 @@ CONTAINS
             einc, hinc, focustype, src%nfocus)
     END IF
 
-  END SUBROUTINE src_fields
+  END SUBROUTINE src_fields_b
 
   FUNCTION compute_focus_maximum(f, na, w0, ri, omega, focustype) RESULT(emax)
     REAL (KIND=dp), INTENT(IN) :: f, na, w0, omega

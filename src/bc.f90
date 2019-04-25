@@ -199,10 +199,10 @@ CONTAINS
   SUBROUTINE expand_solution(dim, id, phase, b)
     INTEGER, INTENT(IN) :: dim
     INTEGER, DIMENSION(:), INTENT(IN) :: id
-    COMPLEX (KIND=dp), DIMENSION(:), INTENT(IN) :: phase
-    COMPLEX (KIND=dp), DIMENSION(:,:), INTENT(INOUT) :: b
+    COMPLEX(KIND=dp), DIMENSION(:), INTENT(IN) :: phase
+    COMPLEX(KIND=dp), DIMENSION(:,:), INTENT(INOUT) :: b
 
-    COMPLEX (KIND=dp), DIMENSION(SIZE(b,1),SIZE(b,2)) :: btmp
+    COMPLEX(KIND=dp), DIMENSION(SIZE(b,1),SIZE(b,2)) :: btmp
     INTEGER, DIMENSION(:), ALLOCATABLE :: ind
     INTEGER :: n
 

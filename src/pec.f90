@@ -50,8 +50,8 @@ CONTAINS
     qd_tri = tri_quad_data('tri_gl4')
     qd_tetra = tetra_quad_data('tetra_gl1')
      
-    CALL computeD(omega, ri, mesh, ga(1), prd, qd_tri, D)
-    CALL computeH(omega, ri, mesh, ga(1), prd, qd_tri, H)
+    CALL computeD_b(omega, ri, mesh, ga(1), prd, qd_tri, D)
+    CALL computeH_b(omega, ri, mesh, ga(1), prd, qd_tri, H)
 
     ! Find boundary edges.
     dim = 0

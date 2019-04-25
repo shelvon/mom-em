@@ -24,7 +24,7 @@ PROGRAM main
 
   ! Since lldb-mi doesn't set the cwd properly.
   ! Temporarily using the following ugly solution.
-!  CALL CHDIR("/worktmp/_Work/Codes-Postdoc/eclipse201812/mom-em/examples/focal")
+  ! CALL CHDIR("/worktmp/_Work/Codes-Postdoc/eclipse201812/mom-em/examples/sphere")
   CALL GETCWD(cwd)
   WRITE(*,*) 'The current working directory:'
   WRITE(*,*) TRIM(cwd)
@@ -43,6 +43,9 @@ PROGRAM main
       CALL GETARG(iarg, varg)
 
       WRITE(*,*) 'Read modelling parameters through JSON file "', TRIM(varg), '".'
+
+!      WRITE(*,*) TRIM(varg), LEN(TRIM(varg))
+!      STOP
       CALL json2model(TRIM(varg), model)
 
       WRITE(*,*) 'The solver is running ...'

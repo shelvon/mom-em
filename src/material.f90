@@ -20,7 +20,6 @@ CONTAINS
       value = CMPLX( REAL(value)**2-AIMAG(value)**2,  &
                      2.0_dp*REAL(value)*AIMAG(value), KIND=dp )
     ELSE IF ( media%eps%active ) THEN
-
       value = get_eps( media%eps, TRIM(media%name), zwl )
     ELSE
       WRITE(*,*) '  --Neither media%ri nor media%eps is set up!'

@@ -13,8 +13,27 @@ MODULE pupil
 
 CONTAINS
 
+  FUNCTION pupil_e2h(pE) RESULT(pH)
+    TYPE(pupil_type), INTENT(IN)      :: pE
+
+    TYPE(pupil_type)                  :: pH
+
+    pH = pE
+
+    pH%Phi(2) = pE%Phi(1)
+    pH%R(2) = pE%R(1)
+    pH%Phi(1) = pE%Phi(2)
+    pH%R(1) = pE%R(2)
+    pH%Phi(1)%cn = -pH%Phi(1)%cn
+
+!    WRITE(*,*) LBOUND(pH%Phi(1)%cn), pH%Phi(1)%cn
+!    WRITE(*,*) LBOUND(pE%Phi(2)%cn), pE%Phi(2)%cn
+!    STOP
+
+  END FUNCTION pupil_e2h
+
   ! generate a general and equivalent pupil function
-  FUNCTION generate_pupil0(focus, theta_max) RESULT(p0)
+  FUNCTION generate_pupil(focus, theta_max) RESULT(p0)
     TYPE(focus_type), INTENT(IN)      :: focus
     REAL(KIND=dp), INTENT(IN)         :: theta_max
     TYPE(pupil_type)                  :: p0
@@ -84,7 +103,7 @@ CONTAINS
       p0%R(3)%thetaBounds = (/0.0_dp, theta_max/)
     END IF
 
-  END FUNCTION generate_pupil0
+  END FUNCTION generate_pupil
 
   !--general pupil function for input beam of basic types
   RECURSIVE FUNCTION basis2pupil(pol, n) RESULT(res)

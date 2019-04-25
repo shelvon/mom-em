@@ -75,7 +75,7 @@ CONTAINS
     ! fson_value to model%solution
     CALL fson_get(json_root,"solution", json_item)
     IF ( ASSOCIATED(json_item) ) THEN
-      CALL json2solution(json_item, model%solution)
+      CALL json2solution(json_item, model%solution, SIZE(model%simulation%zwl) )
       WRITE(*,*) 'Node model%solution is loaded.'
     ELSE
       WRITE(*,*) 'Node model%solution is not found!'
@@ -93,33 +93,12 @@ CONTAINS
     TYPE(geom_type), INTENT(INOUT)            :: geom
 
     TYPE(fson_value), POINTER                 :: json_item, json_array
-    INTEGER                                   :: ndom, idom, nquad, iquad, dim
+    INTEGER                                   :: ndom, idom
+    CHARACTER(LEN=16)                         :: qd_rule
 
     ! fson_value to geom%mesh
     CALL fson_get(json_root,"mesh", json_item)
     CALL json2mesh(json_item, geom%mesh)
-
-    ! set global quadrature rule
-    geom%quad(2)%dim = 2
-    geom%quad(2)%rule = 'tri_gl13'  ! by default
-    geom%quad(3)%dim = 3
-    geom%quad(3)%rule = 'tetra_gl4' ! by default
-    ! load global qd rules if they exist
-    CALL fson_get(json_root, "quad", json_array)
-    IF ( ASSOCIATED(json_array) ) THEN
-      nquad = fson_value_count(json_array)
-      DO iquad = 1, nquad
-        ! Get the array item (this is an associative array)
-        json_item => fson_value_get(json_array, iquad)
-        ! array in json file is indexed from 0,
-        ! but fson_value_get function is indexed from 1
-
-        CALL fson_get(json_item, "dim", dim)
-        IF ( (dim == 2) .OR. (dim == 3) ) THEN
-          CALL json2quad( json_item, geom%quad(dim) )
-        END IF
-      END DO
-    END IF
 
     ! fson_value to geom%domain
     CALL fson_get(json_root, "domain", json_array)
@@ -131,10 +110,20 @@ CONTAINS
     ! etc.
     ALLOCATE(geom%domain(-1:ndom-1))
 
-    ! copy global qd rule to domain(-1), i.e. the entire system
-    ALLOCATE(geom%domain(-1)%quad(2:3))
-    geom%domain(-1)%quad(2) = geom%quad(2)
-    geom%domain(-1)%quad(3) = geom%quad(3)
+    ! set global [domain(-1)] quadrature rule
+    CALL fson_get(json_root, "qd_tri", json_item)
+    IF ( ASSOCIATED(json_item) ) THEN
+      CALL fson_get(json_root, "qd_tri", geom%domain(-1)%qdrule_tri)
+    ELSE
+      geom%domain(-1)%qdrule_tri = 'tri_gl13'
+    END IF
+
+    CALL fson_get(json_root, "qd_tetra", json_item)
+    IF ( ASSOCIATED(json_item) ) THEN
+      CALL fson_get(json_root, "qd_tetra", geom%domain(-1)%qdrule_tetra)
+    ELSE
+      geom%domain(-1)%qdrule_tetra = 'tetra_gl4'
+    END IF
 
     DO idom = 1, ndom
       ! Get the array item (this is an associative array)
@@ -142,7 +131,7 @@ CONTAINS
       ! array in json file is indexed from 0,
       ! but fson_value_get function is indexed from 1
 
-      CALL json2domain(json_item, geom%domain(idom-1))
+      CALL json2domain(json_item, geom%domain(idom-1), geom%domain(-1))
     END DO
   END SUBROUTINE json2geom
 
@@ -162,13 +151,15 @@ CONTAINS
   END SUBROUTINE json2mesh
 
   ! fson_value to domain
-  SUBROUTINE json2domain(json_root, domain)
+  SUBROUTINE json2domain(json_root, domain, domainAll)
     IMPLICIT NONE
     TYPE(fson_value), POINTER, INTENT(IN)     :: json_root
     TYPE(domain_type), INTENT(INOUT)          :: domain
+    TYPE(domain_type), INTENT(IN)             :: domainAll
 
     TYPE(fson_value), POINTER                 :: json_item, json_array
-    INTEGER                                   :: nsurface, nvolume, nquad, iquad
+    INTEGER                                   :: nsurface, nvolume
+    CHARACTER(LEN=16)                         :: qd_rule
 
     ! get media index
     CALL fson_get(json_root, "media", domain%media)
@@ -195,34 +186,23 @@ CONTAINS
       WRITE(*,*) '  Node geom%domain%volume is not found!'
     END IF
 
-    ! get quadrature rules for surface/volume, specified by surface/volume ids
-    CALL fson_get(json_root, "quad", json_array)
-    IF ( ASSOCIATED(json_array) ) THEN
-      nquad = fson_value_count(json_array)
-      ALLOCATE(domain%quad(1:nquad))
-      DO iquad = 1, nquad
-        ! Get the array item (this is an associative array)
-        json_item => fson_value_get(json_array, iquad)
-        ! array in json file is indexed from 0,
-        ! but fson_value_get function is indexed from 1
+    ! set global [domain(-1)] quadrature rule
+    CALL fson_get(json_root, "qd_tri", json_item)
+    IF ( ASSOCIATED(json_item) ) THEN
+      CALL fson_get(json_root, "qd_tri", domain%qdrule_tri)
+    ELSE
+      domain%qdrule_tri = domainAll%qdrule_tri
+    END IF
 
-        CALL json2quad( json_item, domain%quad(iquad) )
-      END DO! imedia
+    CALL fson_get(json_root, "qd_tetra", json_item)
+    IF ( ASSOCIATED(json_item) ) THEN
+      CALL fson_get(json_root, "qd_tetra", domain%qdrule_tetra)
+    ELSE
+      domain%qdrule_tetra = domainAll%qdrule_tetra
     END IF
 
   END SUBROUTINE json2domain
 
-  SUBROUTINE json2quad(json_root, quad)
-    IMPLICIT NONE
-    TYPE(fson_value), POINTER, INTENT(IN)     :: json_root
-    TYPE(quad_type), INTENT(INOUT)            :: quad
-
-    CALL fson_get(json_root, "dim", quad%dim)
-    CALL fson_get(json_root, "id", quad%id)
-    CALL fson_get(json_root, "rule", quad%rule)
-
-  END SUBROUTINE json2quad
-  
   ! json_value to physics
   SUBROUTINE json2physics(json_root, physics)
     IMPLICIT NONE
@@ -297,12 +277,35 @@ CONTAINS
 
     ! get media name
     CALL fson_get(json_root, "name", media%name)
-    ! get ri, i.e. refractive index
-    CALL json2property(json_root, "ri", media%ri)
+
     ! get epsilon
     CALL json2property(json_root, "epsilon", media%eps)
+    IF (media%eps%active) THEN
+      media%ri%active = .FALSE.
+    END IF
+
+    ! get ri, i.e. refractive index
+    CALL json2property(json_root, "ri", media%ri)
+    IF (media%ri%active) THEN
+      media%eps%active = .FALSE.
+    END IF
+
+    ! set default value for permittivity through refractive index
+    IF ( (.NOT. media%ri%active) .AND. (.NOT. media%eps%active) ) THEN
+      media%ri%active = .TRUE.
+      media%ri%method = 'value'
+      ! non-dispersive, i.e. constant value
+      ALLOCATE(media%ri%re(1))
+      ALLOCATE(media%ri%im(1))
+      ALLOCATE(media%ri%z(1))
+      media%ri%re(1) = 1.0_dp
+      media%ri%im(1) = 0.0_dp
+      media%ri%z(1) = CMPLX(0.0, 0.0, KIND=dp)
+    END IF
+
     ! get mu
     CALL json2property(json_root, "mu", media%mu)
+
   END SUBROUTINE json2media
 
   ! json_value to source
@@ -701,6 +704,7 @@ CONTAINS
     CALL fson_get(json_root, json_path, json_item)
     IF (associated(json_item)) THEN
       property%active = .TRUE.
+
       CALL fson_get(json_item, "method", property%method)
       IF ( property%method == 'value' ) THEN
         ! non-dispersive, i.e. constant value
@@ -713,24 +717,29 @@ CONTAINS
         CALL fson_get(json_item, "real", json_item_sub)
         IF (associated(json_item_sub)) THEN
           CALL fson_get(json_item, "real", property%re(1))
+        ELSE
+          property%re(1) = 1.0_dp
         END IF
 
         CALL fson_get(json_item, "imag", json_item_sub)
         IF (associated(json_item_sub)) THEN
           CALL fson_get(json_item, "imag", property%im(1))
+        ELSE
+          property%im(1) = 0.0_dp
         END IF
         property%z = CMPLX(property%re, property%im, KIND=dp)
 
       ELSE IF ( property%method == 'table' ) THEN
         CALL fson_get(json_item, "ref_file", property%ref_file)
-        ! CALL fson_get(json_item, "ref_file", json_item_sub)
-        ! IF (associated(json_item_sub)) THEN
-        !   CALL fson_get(json_item, "ref_file", property%ref_file)
-        ! END IF
+
       ELSE IF (property%method == 'model') THEN
         CALL fson_get(json_item, "model", property%model)
       END IF
+
+    ELSE
+      property%active = .FALSE.
     END IF
+
   END SUBROUTINE json2property
 
   ! json_value to simulation
@@ -766,6 +775,7 @@ CONTAINS
     ELSE
       WRITE(*,*) '  Node simulation%wl is not found!'
     END IF
+
   END SUBROUTINE json2simulation
 
   SUBROUTINE json2solver( json_root, solver )
@@ -932,6 +942,11 @@ CONTAINS
       IF ( TRIM(wl_method) == 'list' ) THEN
         ALLOCATE(simulation%wl(1:SIZE(wl_value,1)))
         simulation%wl = wl_value
+
+        ALLOCATE(simulation%zwl(1:SIZE(wl_value,1)))
+        simulation%zwl = CMPLX(wl_value,0.0, KIND=dp)
+        WRITE(*,*) simulation%zwl
+
       ELSE IF ( TRIM(wl_method) == 'range' ) THEN
         nwl = INT(wl_value(1))
         ALLOCATE(simulation%wl(1:nwl))
@@ -942,6 +957,7 @@ CONTAINS
                                    CMPLX(wl_value(3), 0.0_dp, KIND=dp),&
                                    nwl, 1)
         WRITE(*,*) simulation%zwl
+
       ELSE IF ( TRIM(wl_method) == 'zrange' ) THEN
         nwlx = NINT(wl_value(1))
         nwly = NINT(wl_value(2))
@@ -955,6 +971,7 @@ CONTAINS
       END IF
 
       WRITE(*,*) '  Node simulation%wl is loaded.'
+
     ELSE
       WRITE(*,*) '  Loading value for node simulation%wl is not found!'
       STOP ERR0
@@ -968,19 +985,35 @@ CONTAINS
     END IF
   END SUBROUTINE json2wavelength
 
-  SUBROUTINE json2solution(json_root, solution)
+  SUBROUTINE json2solution(json_root, solution, nwl)
     IMPLICIT NONE
     TYPE(fson_value), POINTER, INTENT(IN)     :: json_root
     TYPE(solution_type), INTENT(INOUT)        :: solution
+    INTEGER, INTENT(IN)                       :: nwl
 
     TYPE(fson_value), POINTER                 :: json_item, json_item_sub, json_array
-    INTEGER                                   :: nfocal, ifocal
+    INTEGER                                   :: nfocal, ifocal, isave, nsave
+    INTEGER, DIMENSION(:), ALLOCATABLE        :: saveidx
+
+    ALLOCATE( solution%base(nwl) )
+    solution%base(:)%save = .FALSE.
 
     CALL fson_get(json_root, "base", json_item)
     IF ( ASSOCIATED(json_item) ) THEN
       CALL fson_get(json_root, "base.save", json_item_sub)
-      IF ( ASSOCIATED(json_item) ) THEN
-        CALL fson_get(json_root, "base.save", solution%base%save)
+      IF ( ASSOCIATED(json_item_sub) ) THEN
+        CALL fson_get(json_root, "base.save", saveidx)
+
+        nsave = SIZE(saveidx)
+        DO isave = 1, nsave
+          IF ( (saveidx(isave) > 0) .AND. (saveidx(isave) <= nwl) ) THEN
+            solution%base(saveidx(isave))%save = .TRUE.
+          ELSE IF ( (saveidx(isave) < 0) .AND. (saveidx(isave) >= -nwl) ) THEN
+            solution%base(nwl+1+saveidx(isave))%save = .TRUE.
+          END IF
+
+        END DO ! isave
+
         WRITE(*,*) '    Node solution%base%save is loaded.'
       END IF
     END IF
@@ -1007,42 +1040,62 @@ CONTAINS
     TYPE(fson_value), POINTER, INTENT(IN)     :: json_root
     TYPE(focal3d_type), INTENT(INOUT)         :: focal
 
+    TYPE(fson_value), POINTER                 :: json_item
+    REAL(KIND=dp)                 :: x1a, x1b, x2a, x2b, x3a, x3b
+    REAL(KIND=dp), DIMENSION(2)   :: x1, x2, x3
+    INTEGER                       :: n1, n2, n3
+
     CALL fson_get(json_root, "label", focal%label)
     CALL fson_get(json_root, "isrc", focal%isrc)
     CALL fson_get(json_root, "wl", focal%wl)
-    CALL fson_get(json_root, "x[1]", focal%grid%nx)
-    CALL fson_get(json_root, "y[1]", focal%grid%ny)
-    CALL fson_get(json_root, "z[1]", focal%grid%nz)
 
-    CALL fson_get(json_root, "x[2]", focal%grid%xa)
-    CALL fson_get(json_root, "y[2]", focal%grid%ya)
-    CALL fson_get(json_root, "z[2]", focal%grid%za)
-
-    IF ( focal%grid%nx .EQ. 1 ) THEN
-      focal%grid%xb = focal%grid%xa
+    CALL fson_get(json_root, "coordinate", json_item)
+    IF ( ASSOCIATED(json_item) ) THEN
+      CALL fson_get(json_root, "coordinate", focal%grid%coord)
     ELSE
-      CALL fson_get(json_root, "x[3]", focal%grid%xb)
+      focal%grid%coord = 'car'
     END IF
 
-    IF ( focal%grid%ny .EQ. 1 ) THEN
-      focal%grid%yb = focal%grid%ya
+    CALL fson_get(json_root, "x1[1]", n1)
+    CALL fson_get(json_root, "x2[1]", n2)
+    CALL fson_get(json_root, "x3[1]", n3)
+
+    CALL fson_get(json_root, "x1[2]", x1a)
+    CALL fson_get(json_root, "x2[2]", x2a)
+    CALL fson_get(json_root, "x3[2]", x3a)
+
+    IF ( n1 .EQ. 1 ) THEN
+      x1b = x1a
     ELSE
-      CALL fson_get(json_root, "y[3]", focal%grid%yb)
+      CALL fson_get(json_root, "x1[3]", x1b)
     END IF
 
-    IF ( focal%grid%nz .EQ. 1 ) THEN
-      focal%grid%zb = focal%grid%za
+    IF ( n2 .EQ. 1 ) THEN
+      x2b = x2a
     ELSE
-      CALL fson_get(json_root, "z[3]", focal%grid%zb)
+      CALL fson_get(json_root, "x2[3]", x2b)
     END IF
-    ALLOCATE( focal%grid%x(1:focal%grid%nx), focal%grid%y(1:focal%grid%ny), &
-              focal%grid%z(1:focal%grid%nz))
-    focal%grid%x = linspace(focal%grid%xa, focal%grid%xb, focal%grid%nx)
-    focal%grid%y = linspace(focal%grid%ya, focal%grid%yb, focal%grid%ny)
-    focal%grid%z = linspace(focal%grid%za, focal%grid%zb, focal%grid%nz)
 
-    CALL meshgrid( focal%grid%x, focal%grid%y, focal%grid%z, &
-                   focal%grid%gridx, focal%grid%gridy, focal%grid%gridz)
+    IF ( n3 .EQ. 1 ) THEN
+      x3b = x3a
+    ELSE
+      CALL fson_get(json_root, "x3[3]", x3b)
+    END IF
+
+    x1 = (/x1a, x1b/)
+    x2 = (/x2a, x2b/)
+    x3 = (/x3a, x3b/)
+
+    ALLOCATE( focal%nodes(1:n1*n2*n3) )
+
+    CALL generate_nodes(n1, n2, n3, x1, x2, x3, focal%nodes, focal%grid%coord)
+
+    focal%grid%n1 = n1
+    focal%grid%n2 = n2
+    focal%grid%n3 = n3
+    focal%grid%x1 = x1
+    focal%grid%x2 = x2
+    focal%grid%x3 = x3
 
   END SUBROUTINE json2focal
 
@@ -1096,38 +1149,64 @@ CONTAINS
   SUBROUTINE write_field_h5(filename, grid, field, coord_set)
     IMPLICIT NONE
     CHARACTER(LEN=*), INTENT(IN)      :: filename
-    TYPE(grid3d_type), INTENT(IN)     :: grid
-    TYPE(field3d_type), INTENT(IN)    :: field
+    TYPE(grid_type), INTENT(IN)       :: grid
+    TYPE(field_type), INTENT(IN), DIMENSION(:) :: field
     INTEGER(HID_T)                    :: file_id
-    CHARACTER(LEN=*), INTENT(IN), OPTIONAL  :: coord_set! ['cart', 'pol']
+    CHARACTER(LEN=3), INTENT(IN), OPTIONAL  :: coord_set! ['car', 'cyl', 'sph']
 
-    CHARACTER(LEN=4)                  :: coord
+    CHARACTER(LEN=3)                  :: coord
+    REAL(KIND=dp), DIMENSION(grid%n1, grid%n2, grid%n3) :: e1_re, e1_im, e2_re, e2_im, e3_re, e3_im
+    REAL(KIND=dp), DIMENSION(grid%n1) :: vx1
+    REAL(KIND=dp), DIMENSION(grid%n2) :: vx2
+    REAL(KIND=dp), DIMENSION(grid%n3) :: vx3
 
     IF (PRESENT(coord_set)) THEN
-      coord = TRIM(coord_set)
+      coord = coord_set
     ELSE
-      coord = 'cart'
+      coord = 'car'
     END IF
     ! create and open h5 file, get the file_id
     CALL create_h5(filename, file_id)
 
+    e1_re = RESHAPE(REAL(field(:)%e(1)), (/grid%n1, grid%n2, grid%n3/))
+    e1_im = RESHAPE(AIMAG(field(:)%e(1)), (/grid%n1, grid%n2, grid%n3/))
+    e2_re = RESHAPE(REAL(field(:)%e(2)), (/grid%n1, grid%n2, grid%n3/))
+    e2_im = RESHAPE(AIMAG(field(:)%e(2)), (/grid%n1, grid%n2, grid%n3/))
+    e3_re = RESHAPE(REAL(field(:)%e(3)), (/grid%n1, grid%n2, grid%n3/))
+    e3_im = RESHAPE(AIMAG(field(:)%e(3)), (/grid%n1, grid%n2, grid%n3/))
+
     SELECT CASE (TRIM(coord))
-      CASE ('cart')
-        CALL write_h5_d3(file_id, 'ex_re', REAL(field%ex))
-        CALL write_h5_d3(file_id, 'ex_im', AIMAG(field%ex))
-        CALL write_h5_d3(file_id, 'ey_re', REAL(field%ey))
-        CALL write_h5_d3(file_id, 'ey_im', AIMAG(field%ey))
-      CASE ('pol')
-        CALL write_h5_d3(file_id, 'erho_re', REAL(field%erho))
-        CALL write_h5_d3(file_id, 'erho_im', AIMAG(field%erho))
-        CALL write_h5_d3(file_id, 'ephi_re', REAL(field%ephi))
-        CALL write_h5_d3(file_id, 'ephi_im', AIMAG(field%ephi))
+      CASE ('car')
+        CALL write_h5_d3(file_id, 'ex_re', e1_re)
+        CALL write_h5_d3(file_id, 'ex_im', e1_im)
+        CALL write_h5_d3(file_id, 'ey_re', e2_re)
+        CALL write_h5_d3(file_id, 'ey_im', e2_im)
+      CASE ('cyl')
+        CALL write_h5_d3(file_id, 'erho_re', e1_re)
+        CALL write_h5_d3(file_id, 'erho_im', e1_im)
+        CALL write_h5_d3(file_id, 'ephi_re', e2_re)
+        CALL write_h5_d3(file_id, 'ephi_im', e2_im)
     END SELECT
-    CALL write_h5_d3(file_id, 'ez_re', REAL(field%ez))
-    CALL write_h5_d3(file_id, 'ez_im', AIMAG(field%ez))
-    CALL write_h5_d1(file_id, 'x', grid%x)
-    CALL write_h5_d1(file_id, 'y', grid%y)
-    CALL write_h5_d1(file_id, 'z', grid%z)
+    CALL write_h5_d3(file_id, 'ez_re', e3_re)
+    CALL write_h5_d3(file_id, 'ez_im', e3_im)
+
+    vx1 = linspace(grid%x1(1), grid%x1(2), grid%n1)
+    vx2 = linspace(grid%x2(1), grid%x2(2), grid%n2)
+    vx3 = linspace(grid%x3(1), grid%x3(2), grid%n3)
+    SELECT CASE ( grid%coord )
+      CASE ('car')
+        CALL write_h5_d1(file_id, 'x', vx1)
+        CALL write_h5_d1(file_id, 'y', vx2)
+        CALL write_h5_d1(file_id, 'z', vx3)
+      CASE ('cyl')
+        CALL write_h5_d1(file_id, 'rho', vx1)
+        CALL write_h5_d1(file_id, 'theta', vx2)
+        CALL write_h5_d1(file_id, 'z', vx3)
+      CASE ('sph')
+        CALL write_h5_d1(file_id, 'r', vx1)
+        CALL write_h5_d1(file_id, 'theta', vx2)
+        CALL write_h5_d1(file_id, 'phi', vx3)
+    END SELECT
 
     ! close h5 file by file_id
     CALL close_h5(file_id)

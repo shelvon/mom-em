@@ -113,7 +113,7 @@ CONTAINS
     CHARACTER (LEN=256) :: numstr, oname
     INTEGER :: i
 
-    CALL determine_edge_couples(b%mesh, 1D-12)
+    CALL determine_edge_couples(b%mesh, tol)
     CALL submesh_edge_connectivity(b%mesh, b%domains(:)%mesh)
     CALL orient_basis(b%mesh, b%domains(:)%mesh)
 
@@ -887,37 +887,37 @@ CONTAINS
 
     WRITE(*,*) 'command nfms'
     IF(srcindex/=0) THEN
-        WRITE(*,*) 'srcindex=',srcindex,'; pos:',b%src(srcindex)%pos
+      WRITE(*,*) 'srcindex=',srcindex,'; pos:',b%src(srcindex)%pos
 
-        WRITE(numstr, '(A,I0,A,I0,A,I0)') '-wl', wlindex, '-s', srcindex, '-d', dindex
-        oname = TRIM(b%name) // TRIM(ADJUSTL(numstr)) // '.msh'
+      WRITE(numstr, '(A,I0,A,I0,A,I0)') '-wl', wlindex, '-s', srcindex, '-d', dindex
+      oname = TRIM(b%name) // TRIM(ADJUSTL(numstr)) // '.msh'
+
+      CALL field_mesh(oname, b%domains(dindex)%mesh, b%scale, b%mesh%nedges,&
+           b%sols(wlindex)%x(:,:,srcindex), b%ga, omega, ri)
+
+      !CALL gradPnls_mesh('gradPnls.msh', b%domains(dindex)%mesh, b%scale, b%mesh%nedges,&
+      !     b%sols(wlindex)%x(:,:,srcindex), b%ga, omega, ri)
+
+      IF(ALLOCATED(b%sols(wlindex)%nlx)) THEN
+        oname = TRIM(b%name) // TRIM(ADJUSTL(numstr)) // '-sh.msh'
+
+        ri = b%media(b%domains(dindex)%medium_index)%prop(wlindex)%shri
 
         CALL field_mesh(oname, b%domains(dindex)%mesh, b%scale, b%mesh%nedges,&
-             b%sols(wlindex)%x(:,:,srcindex), b%ga, omega, ri)
+          b%sols(wlindex)%nlx(:,:,srcindex), b%ga, 2.0_dp*omega, ri)
 
-        !CALL gradPnls_mesh('gradPnls.msh', b%domains(dindex)%mesh, b%scale, b%mesh%nedges,&
-        !     b%sols(wlindex)%x(:,:,srcindex), b%ga, omega, ri)
-
-        IF(ALLOCATED(b%sols(wlindex)%nlx)) THEN
-           oname = TRIM(b%name) // TRIM(ADJUSTL(numstr)) // '-sh.msh'
-
-           ri = b%media(b%domains(dindex)%medium_index)%prop(wlindex)%shri
-
-           CALL field_mesh(oname, b%domains(dindex)%mesh, b%scale, b%mesh%nedges,&
-                b%sols(wlindex)%nlx(:,:,srcindex), b%ga, 2.0_dp*omega, ri)
-
-        END IF
+      END IF
     END IF
 
     IF(modeindex/=0) THEN
-        WRITE(*,*) 'modeindex=',modeindex
-        WRITE(numstr, '(A,I0,A,I0,A,I0)') '-wl', wlindex, '-m', modeindex, '-d', dindex
+      WRITE(*,*) 'modeindex=',modeindex
+      WRITE(numstr, '(A,I0,A,I0,A,I0)') '-wl', wlindex, '-m', modeindex, '-d', dindex
 
-        oname = TRIM(b%name) // TRIM(ADJUSTL(numstr)) // '.msh'
+      oname = TRIM(b%name) // TRIM(ADJUSTL(numstr)) // '.msh'
 !        CALL field_mode_mesh(oname, b%domains(dindex)%mesh, b%scale, b%mesh%nedges,&
 !             b%sols(wlindex)%eigvec(:,modeindex), omega, ri)
-        CALL field_mesh(oname, b%domains(dindex)%mesh, b%scale, b%mesh%nedges,&
-             b%sols(wlindex)%x(:,:,modeindex), b%ga, omega, ri)
+      CALL field_mesh(oname, b%domains(dindex)%mesh, b%scale, b%mesh%nedges,&
+        b%sols(wlindex)%x(:,:,modeindex), b%ga, omega, ri)
     END IF
 
   END SUBROUTINE read_nfms

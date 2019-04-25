@@ -45,7 +45,7 @@ if(CMAKE_Fortran_COMPILER_ID MATCHES "GNU")
 	# Be careful with -fcheck=all, it may emit run-time errors as the option ‘pointer’
 	# enable generation of run-time checks for pointers and allocatables and make
 	# the debugging impossible.
-	set(FCFLAGS_Debug " -g -fopenmp -O0 -Wall -Wno-unused-dummy-argument -fbacktrace -ffree-line-length-0")
+	set(FCFLAGS_Debug " -g -fopenmp -O0 -Wall -Wno-unused-dummy-argument -fbounds-check  -fbacktrace -ffree-line-length-0")
 
 elseif(CMAKE_Fortran_COMPILER_ID MATCHES "Intel")
 	set(FCFLAGS " -fpp -heap-arrays")
@@ -168,6 +168,7 @@ nlsurf.f90
 pupil.f90
 quad.f90
 rwgf.f90
+scattering.f90
 solver.f90
 #solver_vie.f90
 source.f90

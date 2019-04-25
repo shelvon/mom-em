@@ -2,7 +2,7 @@
 ! AUTHOR: Xiaorun ZANG
 ! DESCRIPTION:
 ! Routines to find intrinsic resonance modes of single nanoparticle.
-MODULE modes 
+MODULE modes
   USE sysmat
   USE bc
   USE aux
@@ -86,10 +86,10 @@ CONTAINS
     invSigma(:,:) = 0.0_dp
 
     WRITE(*,*) 'Building matrices ...'
-    WRITE(*,*) 'Triangle quadrature: ', TRIM(domain(-1)%quad(2)%qd%description)
+    WRITE(*,*) 'Triangle quadrature: ', TRIM(domain(-1)%qd_tri%description)
     ! Compute the system matrix for all group representations.
     ! This is O(N^2), but in practice the most time consuming part.
-    CALL rwg_moments(domain(-1)%elements, domain(-1)%quad(2)%qd, F)
+    CALL rwg_moments(domain(-1)%elements, domain(-1)%qd_tri, F)
     CALL matrix_inverse(F, invF)
 
     time_loop = 0.0_dp
@@ -215,9 +215,9 @@ CONTAINS
     eigvec(:,:) = CMPLX(0,0,KIND=dp)
 
     WRITE(*,*) 'Building matrices ...'
-    WRITE(*,*) 'Triangle quadrature: ', TRIM(domain(-1)%quad(2)%qd%description)
+    WRITE(*,*) 'Triangle quadrature: ', TRIM(domain(-1)%qd_tri%description)
 
-    CALL rwg_moments(domain(-1)%elements, domain(-1)%quad(2)%qd, F)
+    CALL rwg_moments(domain(-1)%elements, domain(-1)%qd_tri, F)
     CALL matrix_inverse(F, invF)
 
     ! Compute the system matrix for all group representations.

@@ -54,7 +54,7 @@ CONTAINS
                   omega, ri, prd, pt(:,m,n,s), qd, ef, hf)
              
              IF(addsrc) THEN
-                CALL src_fields(src, omega, ri, pt(:,m,n,s), einc, hinc)
+                CALL src_fields_b(src, omega, ri, pt(:,m,n,s), einc, hinc)
                 
                 ef(:,1) = ef(:,1) + einc
              END IF
@@ -132,7 +132,7 @@ CONTAINS
              hdata(:,index) = hf(:,1)
 
              IF(addsrc) THEN
-                CALL src_fields(src, omega, ri, pt(:,index), einc, hinc)
+                CALL src_fields_b(src, omega, ri, pt(:,index), einc, hinc)
 
                 edata(:,index) = edata(:,index) + einc
                 hdata(:,index) = hdata(:,index) + hinc
@@ -320,7 +320,7 @@ CONTAINS
             omega, ri, prd, pt, qd, ef(:,n), hf(:,n))
 
        IF(addsrc) THEN
-          CALL src_fields(src, omega, ri, pt, einc, hinc)
+          CALL src_fields_b(src, omega, ri, pt, einc, hinc)
           
           ef(:,n) = ef(:,n) + einc
           hf(:,n) = hf(:,n) + hinc
@@ -370,7 +370,7 @@ CONTAINS
           
           IF(addsrc) THEN
              DO ns=1,SIZE(src)
-                CALL src_fields(src(ns), omega, ri, pt, einc, hinc)
+                CALL src_fields_b(src(ns), omega, ri, pt, einc, hinc)
                 
                 ef(:,ns,m,n) = ef(:,ns,m,n) + einc
                 hf(:,ns,m,n) = hf(:,ns,m,n) + hinc                

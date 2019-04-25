@@ -352,7 +352,7 @@ CONTAINS
        END DO
 
        DO r=1,nweights
-          CALL src_fields(src, omega, ri, qpm(:,r), einc, hinc)
+          CALL src_fields_b(src, omega, ri, qpm(:,r), einc, hinc)
 
           dinc(:,r) = eps0*einc
        END DO

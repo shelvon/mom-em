@@ -1,7 +1,7 @@
 ! MODULE: focal
 ! AUTHOR: Xiaorun (Shelvon) ZANG
 ! DESCRIPTION:
-! Routines to focal field definition and calculation.
+! Routines for focal field calculation.
 MODULE focal
   USE data
   USE quad
@@ -15,24 +15,26 @@ MODULE focal
 
 CONTAINS
 
-  SUBROUTINE focal_field(focus, wl, ri1, ri2, grid, field)
+  SUBROUTINE focal_field(focus, wl, ri, pt, Einc, Hinc)
     TYPE(focus_type), INTENT(IN)            :: focus
     REAL(KIND=dp), INTENT(IN)               :: wl
-    COMPLEX(KIND=dp), INTENT(IN)            :: ri1, ri2
-    TYPE(grid3d_type), INTENT(IN)           :: grid
-    TYPE(field3d_type), INTENT(INOUT)       :: field
+    COMPLEX(KIND=dp), INTENT(IN)            :: ri
+    REAL(KIND=dp), DIMENSION(3), INTENT(IN) :: pt
+    ! The focal fields Einc and Hinc are calculated in cylindrical coordinate.
+    ! [E|H]inc(1): radial field component;
+    ! [E|H]inc(2): azimuthal field component;
+    ! [E|H]inc(3): z-field component.
+    COMPLEX(KIND=dp), DIMENSION(3), INTENT(OUT) :: Einc, Hinc
 
     !--some beam parameters
-    TYPE(pupil_type)  :: pupil0
-    REAL(KIND=dp)     :: E0, omega, k, f, w0, na, theta_max, f0, ldn
+    TYPE(pupil_type)  :: pupilE, pupilH
+    REAL(KIND=dp)     :: E0, omega, k, f, w0, na, theta_max, f0, ldn, zeta
     COMPLEX(KIND=dp)  :: Cf
-    COMPLEX(KIND=dp), DIMENSION(1:3)        :: Ef
 
     ! spatial and related variables
     ! (x,y,z) the location where the focal field is to be calculated.
     ! (rho,varphi,z) the corresponding cylindrical coordinate representation
     REAL(KIND=dp)     :: x, y, z, rho, varphi
-    INTEGER           :: ix, iy, iz, ido, ndo
 
     !--initialization
     f0 = 1.0_dp ! filling factor is set to 1 for all other apertures.
@@ -40,74 +42,33 @@ CONTAINS
     w0 = focus%waist
     na = focus%na
     omega = 2.0_dp*pi*c0/wl
-    k = REAL(ri2, KIND=dp)*omega/c0
-    ldn = wl/REAL(ri2, KIND=dp)
-    theta_max = ASIN(na/REAL(ri2,KIND=dp))
+    k = REAL(ri, KIND=dp)*omega/c0
+    ldn = wl/REAL(ri, KIND=dp)
+    theta_max = ASIN(na/REAL(ri,KIND=dp))
     ! f = focus%focal ! !!!focal length is not an independent parameter!!!
     f = w0*f0/(SIN(theta_max))
-    Cf = -(0,1)*k*f/(2.0_dp*pi)*SQRT(ri1/ri2)
+    Cf = -(0,1)*k*f/(2.0_dp*pi)*SQRT(1.0_dp/ri)
+    zeta = REAL(ri, KIND=dp)/eta0
 
     ! Generate a general and equivalent pupil function for a specific input beam
-    pupil0 = generate_pupil0(focus, theta_max)
+    pupilE = generate_pupil(focus, theta_max)
+    pupilH = pupil_e2h(pupilE)
 
+    x = pt(1)
+    y = pt(2)
+    z = pt(3)
+    rho = SQRT(x**2+y**2)
+    varphi = ATAN2(y,x)
+    
     IF (focus%paraxial) THEN
-      DO iz = 1, grid%nz
-        DO ix = 1, grid%nx
-          DO iy = 1, grid%ny
-            x = grid%x(ix)
-            y = grid%y(iy)
-            z = grid%z(iz)
-            rho = SQRT(x**2+y**2)
-            varphi = ATAN2(y,x)
-
-            Ef = E0*vecP(rho, varphi, z, pupil0, ldn, f, w0)
-            ! field%ex(iy,ix,iz) = Ef(1)
-            ! field%ey(iy,ix,iz) = Ef(2)
-            field%erho(iy,ix,iz) = Ef(1)
-            field%ephi(iy,ix,iz) = Ef(2)
-            field%ez(iy,ix,iz) = Ef(3)
-
-          END DO! iy=
-        END DO! ix=
-      END DO! iz=
+      Einc = E0*vecP(rho, varphi, z, pupilE, ldn, f, w0)
+      Hinc = zeta*E0*vecP(rho, varphi, z, pupilH, ldn, f, w0)
 
     ELSE
-      WRITE(*,*) '    Tightly focal field calculation is running ...'
-      ndo = grid%nz*grid%nx*grid%ny
-      ido = 0;
-      !$OMP PARALLEL DEFAULT(PRIVATE)&
-      !$OMP SHARED(grid, field, E0, Cf, pupil0, k, f, w0, f0, theta_max, ido, ndo)
-      !$OMP DO COLLAPSE(3) SCHEDULE(STATIC)
-      DO iz = 1, grid%nz
-        DO ix = 1, grid%nx
-          DO iy = 1, grid%ny
-            x = grid%x(ix)
-            y = grid%y(iy)
-            z = grid%z(iz)
-            rho = SQRT(x**2+y**2)
-            varphi = ATAN2(y,x)
+      Einc = E0*Cf*vecI(rho, varphi, z, pupilE, k, f, w0, f0, theta_max)
+      Hinc = zeta*E0*Cf*vecI(rho, varphi, z, pupilH, k, f, w0, f0, theta_max)
 
-            Ef = E0*Cf*vecI(rho, varphi, z, pupil0, k, f, w0, f0, theta_max)
-            ! field%ex(iy,ix,iz) = Ef(1)
-            ! field%ey(iy,ix,iz) = Ef(2)
-            field%erho(iy,ix,iz) = Ef(1)
-            field%ephi(iy,ix,iz) = Ef(2)
-            field%ez(iy,ix,iz) = Ef(3)
-
-            ! update the counter only by a single thread at a time
-            !$OMP ATOMIC UPDATE
-            ido = ido + 1
-            !$OMP END ATOMIC
-            ! show progress
-            CALL show_progress(ido, ndo)
-          END DO! iy=
-        END DO! ix=
-      END DO! iz=
-      !$OMP END DO
-      !$OMP END PARALLEL
-      WRITE(*,*) '    Tightly focal field calculation is finished.'
     END IF
-
   END SUBROUTINE focal_field
 
   ! calculate the vector form of the focal field under paraxial approximation
@@ -332,15 +293,20 @@ CONTAINS
         ! The Bessel function J_(n-1) and J_(n+1) are needed as well.
         DO m = n+1, n-1, -1
           ! Whether or not the Bessel function Jn(m) or Jn(-m) has been calculated.
-          ! While inquiring Jn(-m), don't forget about legal the array bounds.
           IF ( Jn_done(m) .EQV. .FALSE. ) THEN
-            IF ( (Jn_done(-m) .EQV. .TRUE.) .AND. &
-                  ( (-m .GT. nMin) .AND. (-m .LT. nMax) ) ) THEN
-              Jn(m)=(-1)**(-m)*Jn(-m)
-            ELSE
+            ! While inquiring Jn(-m), don't forget about legal the array bounds.
+            IF ( (-m .GT. nMin) .AND. (-m .LT. nMax) ) THEN
+              IF (Jn_done(-m) .EQV. .TRUE.) THEN
+                Jn(m)=(-1)**(-m)*Jn(-m)
+              ELSE ! Jn(-m) is legal, but not calculated
+                ! new calculation for the Bessel function
+                Jn(m) = besselj( m, k*rho*SIN(theta) )
+              END IF
+            ELSE ! Jn(-m) is out of bound
               ! new calculation for the Bessel function
               Jn(m) = besselj( m, k*rho*SIN(theta) )
             END IF
+
           END IF
           ! mark the Bessel function of mth-order Jn(m) as calculated
           Jn_done(m) = .TRUE.

@@ -14,6 +14,136 @@ MODULE sysmat
   IMPLICIT NONE
 
 CONTAINS
+
+  ! Solves a linear system of equations for all group representations
+  ! as described by matrices A and source vectors x.
+  ! Removes and copies elements of A and x in order to enforce
+  ! boundary conditions.
+  SUBROUTINE solve_systems(mesh, ga, phdx, phdy, A, x)
+    TYPE(mesh_container), INTENT(IN) :: mesh
+    TYPE(group_action), DIMENSION(:), INTENT(IN) :: ga
+    COMPLEX (KIND=dp), INTENT(IN) :: phdx, phdy
+    COMPLEX (KIND=dp), DIMENSION(:,:,:), INTENT(INOUT) :: A
+    COMPLEX (KIND=dp), DIMENSION(:,:,:), INTENT(INOUT) :: x
+
+    INTEGER :: dim, r, nga
+    INTEGER, DIMENSION(mesh%nedges*2) :: id
+    COMPLEX (KIND=dp), DIMENSION(mesh%nedges*2) :: phase
+
+    nga = SIZE(ga)
+
+    ! Go through all representations.
+    DO r=1,nga
+       ! Determine boundary conditions arising from symmetry and
+       ! periodicity. BC information is stored in id and phase.
+       CALL edge_bc(mesh, ga, phdx, phdy, r, id, phase)
+
+       ! Enforce the boundary conditions on matrix A and source x.
+       CALL resolve_system_dependencies(A(:,:,r), x(:,r,:), id, phase)
+       CALL reduce_system(A(:,:,r), x(:,r,:), dim, id)
+
+       ! Solve the remaining linear system of dimension dim.
+       CALL solve_multi_linsys(A(1:dim,1:dim,r), x(1:dim,r,:))
+
+       ! Expand the solution vector.
+       ! If some elements of x were deemed zero or lin. dep.
+       ! put these values into the solution vectors and make
+       ! its size 2*nedges.
+       CALL expand_solution(dim, id, phase, x(:,r,:))
+    END DO
+  END SUBROUTINE solve_systems
+
+  SUBROUTINE sysmat_pmchwt_linear(domain, ndom, ga, nga, media, zwl, A, N)
+    IMPLICIT NONE
+    TYPE(domain_type), DIMENSION(-1:ndom), INTENT(IN) :: domain
+    TYPE(group_action), DIMENSION(nga), INTENT(IN)    :: ga
+    TYPE(media_type), DIMENSION(0:), INTENT(IN)   :: media
+    COMPLEX(KIND=dp), INTENT(IN)                  :: zwl
+    INTEGER, INTENT(IN)                           :: N, ndom, nga
+    COMPLEX(KIND=dp), DIMENSION(N*2,N*2,nga), INTENT(INOUT) :: A
+
+    COMPLEX(KIND=dp), DIMENSION(N,N)              :: M
+    COMPLEX(KIND=dp), DIMENSION(0:ndom)           :: ri, eps, mu
+    INTEGER, DIMENSION(1:N)                       :: edges_pid
+    COMPLEX(KIND=dp)      :: omega, Zsi, gae
+    REAL(KIND=dp)         :: detj
+    INTEGER               :: idom, imat, nedges, ns, nf
+    TYPE(prdnfo), POINTER :: prd
+
+    omega = 2.0_dp*pi*c0/zwl
+    A(:,:,:) = 0.0_dp
+
+    WRITE(*,*) 'Building matrices'
+    ! Loop through domains.
+    DO idom = 0, ndom
+      WRITE(*,*) '  in domain: ', idom
+      imat = domain(idom)%media
+      eps(idom) = media_eps( media(imat), zwl )*eps0
+      mu(idom) = media_mu( media(imat), zwl )*mu0
+      ri(idom) = SQRT(eps(idom)*mu(idom)/eps0/mu0)
+      Zsi = eps(idom)/mu(idom)! square of the inverse of impedence
+
+      ! Determine global edges indices to index basis functions.
+      nedges = domain(idom)%elements%nedges
+      edges_pid(1:nedges) = domain(idom)%elements%edges(:)%parent_index
+
+      ! Temporarily, no usage of Green's function
+      prd => NULL()
+
+      ! Loop through group actions.
+      DO ns=1,nga
+        IF(admissible_ga(domain(idom)%elements, ga(ns), idom==1) .EQV. .FALSE.) THEN
+          CYCLE
+        END IF
+
+        detj = ga(ns)%detj
+
+        ! Compute block matrix using action of index ns.
+        ! Matrices are independent of field actions.
+        CALL computeD(omega, ri(idom), domain(idom)%elements, ga(ns), &
+          prd, domain(idom)%qd_tri, M(1:nedges,1:nedges))
+
+        ! Add the block matrix to different sub-problems multiplied by proper
+        ! field actions.
+        DO nf=1,nga
+           gae = ga(ns)%ef(nf)
+           
+           A(edges_pid(1:nedges),edges_pid(1:nedges),nf) = A(edges_pid(1:nedges),edges_pid(1:nedges),nf)&
+                + gae*M(1:nedges,1:nedges)
+           A((edges_pid(1:nedges)+N),(edges_pid(1:nedges)+N),nf) = A((edges_pid(1:nedges)+N),(edges_pid(1:nedges)+N),nf)&
+                + gae*detj*Zsi*M(1:nedges,1:nedges)
+        END DO
+
+        CALL computeH(omega, ri(idom), domain(idom)%elements, ga(ns), &
+          prd, domain(idom)%qd_tri, M(1:nedges,1:nedges))
+
+        DO nf=1,nga
+           gae = ga(ns)%ef(nf)
+
+           A(edges_pid(1:nedges),edges_pid(1:nedges),nf) = A(edges_pid(1:nedges),edges_pid(1:nedges),nf)&
+                + gae*M(1:nedges,1:nedges)
+           A((edges_pid(1:nedges)+N),(edges_pid(1:nedges)+N),nf) = A((edges_pid(1:nedges)+N),(edges_pid(1:nedges)+N),nf)&
+                + gae*detj*Zsi*M(1:nedges,1:nedges)
+        END DO
+
+        CALL computeK(omega, ri(idom), domain(idom)%elements, ga(ns), &
+          prd, domain(idom)%qd_tri,  M(1:nedges,1:nedges))
+
+        DO nf=1,nga
+           gae = ga(ns)%ef(nf)
+
+           A((edges_pid(1:nedges)+N),edges_pid(1:nedges),nf) = A((edges_pid(1:nedges)+N),edges_pid(1:nedges),nf)&
+                + gae*M(1:nedges,1:nedges)
+           A(edges_pid(1:nedges),(edges_pid(1:nedges)+N),nf) = A(edges_pid(1:nedges),(edges_pid(1:nedges)+N),nf)&
+                - gae*detj*M(1:nedges,1:nedges)
+        END DO
+
+      END DO ! ns
+
+    END DO ! idom
+
+  END SUBROUTINE sysmat_pmchwt_linear
+
   ! Computes the PMCHWT system matrix for a problem described by
   ! struct b and for wavelength of given index wlind. Matrices are
   ! computed for all group representations.
@@ -65,7 +195,7 @@ CONTAINS
           ! Compute block matrix using action of index ns.
           ! Matrices are independent of field actions.
 
-          CALL computeD(omega, ri, b%domains(nd)%mesh, b%ga(ns), prd, b%qd_tri, M(1:nind,1:nind))
+          CALL computeD_b(omega, ri, b%domains(nd)%mesh, b%ga(ns), prd, b%qd_tri, M(1:nind,1:nind))
 
           ! Add the block matrix to different sub-problems multiplied by proper
           ! field actions.
@@ -78,7 +208,7 @@ CONTAINS
                   + gae*detj*Zsi*M(1:nind,1:nind)
           END DO
 
-          CALL computeH(omega, ri, b%domains(nd)%mesh, b%ga(ns), prd, b%qd_tri, M(1:nind,1:nind))
+          CALL computeH_b(omega, ri, b%domains(nd)%mesh, b%ga(ns), prd, b%qd_tri, M(1:nind,1:nind))
 
           DO nf=1,SIZE(b%ga)
              gae = b%ga(ns)%ef(nf)
@@ -89,7 +219,7 @@ CONTAINS
                   + gae*detj*Zsi*M(1:nind,1:nind)
           END DO
 
-          CALL computeK(omega, ri, b%domains(nd)%mesh, b%ga(ns), prd, b%qd_tri, M(1:nind,1:nind))
+          CALL computeK_b(omega, ri, b%domains(nd)%mesh, b%ga(ns), prd, b%qd_tri, M(1:nind,1:nind))
 
           DO nf=1,SIZE(b%ga)
              gae = b%ga(ns)%ef(nf)
@@ -172,7 +302,7 @@ CONTAINS
           ! Compute block matrix using action of index ns.
           ! Matrices are independent of field actions.
 
-          CALL computeD(omega, ri, b%domains(nd)%mesh, b%ga(ns), prd, b%qd_tri, M(1:nind,1:nind))
+          CALL computeD_b(omega, ri, b%domains(nd)%mesh, b%ga(ns), prd, b%qd_tri, M(1:nind,1:nind))
 
           ! Add the block matrix to different sub-problems multiplied by proper
           ! field actions.
@@ -194,7 +324,7 @@ CONTAINS
              END DO
           END DO
 
-          CALL computeH(omega, ri, b%domains(nd)%mesh, b%ga(ns), prd, b%qd_tri, M(1:nind,1:nind))
+          CALL computeH_b(omega, ri, b%domains(nd)%mesh, b%ga(ns), prd, b%qd_tri, M(1:nind,1:nind))
 
           DO nf=1,SIZE(b%ga)
              gae = b%ga(ns)%ef(nf)
@@ -213,7 +343,7 @@ CONTAINS
              END DO
           END DO
 
-          CALL computeK(omega, ri, b%domains(nd)%mesh, b%ga(ns), prd, b%qd_tri, M(1:nind,1:nind))
+          CALL computeK_b(omega, ri, b%domains(nd)%mesh, b%ga(ns), prd, b%qd_tri, M(1:nind,1:nind))
 
           DO nf=1,SIZE(b%ga)
              gae = b%ga(ns)%ef(nf)
@@ -239,7 +369,6 @@ CONTAINS
   END SUBROUTINE sysmat_pmchwt_nls
 
   ! Computes the system matrix for eigen modes problem of single particle
-  ! described by struct b and for wavelength of given index wlind.
   SUBROUTINE sysmat_mueller(domain, ga, media, zwl, A, N)
     IMPLICIT NONE
     TYPE(domain_type), DIMENSION(-1:), INTENT(IN) :: domain
@@ -257,7 +386,6 @@ CONTAINS
     COMPLEX(KIND=dp)        :: omega
     TYPE(mesh_container)    :: mesh
     TYPE(prdnfo), POINTER   :: prd
-    TYPE(quad_data)         :: qd_tri
     COMPLEX(KIND=dp), DIMENSION(:), ALLOCATABLE :: ri, eps, mu
 
     ndom = SIZE(domain(0:))
@@ -266,7 +394,7 @@ CONTAINS
     ! no periodi green function
     prd => NULL()
     omega = 2.0_dp*pi*c0/zwl
-    qd_tri = domain(-1)%quad(2)%qd
+
     ! Work only for the specific case that all the scatters
     ! have the same epsilon and mu values as the 1st scatter.
     mesh = domain(-1)%elements
@@ -284,11 +412,11 @@ CONTAINS
 !      WRITE(*,'(A,I0,A,'//fmt_cmplx//'SS)') &
 !        ' - Relative permeability (mu) of medium ', idom, ': ', mu(idom)/mu0
       ! Use ga(1), i.e. no group action actually
-      ! CALL compute_nxDHK( omega, ri(idom), mesh, ga(1), prd, qd_tri, &
+      ! CALL compute_nxDHK( omega, ri(idom), mesh, ga(1), prd, domain(idom)%qd_tri, &
       !                     nxD(:,:,idom), nxHline(:,:,idom), nxK(:,:,idom) )
-      CALL computenxD(omega, ri(idom), mesh, ga(1), prd, qd_tri, nxD(:,:,idom))
-      CALL computenxHline(omega, ri(idom), mesh, ga(1), prd, qd_tri, nxHline(:,:,idom))
-      CALL computenxK(omega, ri(idom), mesh, ga(1), prd, qd_tri, nxK(:,:,idom))
+      CALL computenxD(omega, ri(idom), mesh, ga(1), prd, domain(idom)%qd_tri, nxD(:,:,idom))
+      CALL computenxHline(omega, ri(idom), mesh, ga(1), prd, domain(idom)%qd_tri, nxHline(:,:,idom))
+      CALL computenxK(omega, ri(idom), mesh, ga(1), prd, domain(idom)%qd_tri, nxK(:,:,idom))
     END DO ! idom
 
     A(1:N,1:N) = A(1:N,1:N) + nxK(:,:,0)*2.0_dp*mu(0)/(mu(0)+mu(1))
@@ -393,7 +521,7 @@ CONTAINS
   ! Computes the D-matrix elements
   ! D_mng = -i*omega_mu*int_Sm dS fm(r). int_Sn' dS' J_g*fn(r')*O'_gG(r,r').
   ! IN:
-  ! omega: The angular frequency.
+  ! omega: The angular frequency, can be complex-valued in more general cases.
   ! ri: Refractive index of the domain.
   ! mesh: Surface mesh of the scatterer.
   ! ga: Group action identifiers.
@@ -401,6 +529,264 @@ CONTAINS
   ! OUT:
   ! D: The D-matrix.
   SUBROUTINE computeD(omega, ri, mesh, ga, prd, qd, D)
+    ! Input variables
+    TYPE(mesh_container), INTENT(IN)  :: mesh
+    COMPLEX(KIND=dp), INTENT(IN)      :: ri
+    COMPLEX(KIND=dp), INTENT(IN)      :: omega
+    TYPE(group_action), INTENT(IN)    :: ga
+    TYPE(prdnfo), POINTER, INTENT(IN) :: prd
+    TYPE(quad_data), INTENT(IN)       :: qd
+
+    ! Internal variables
+    COMPLEX(KIND=dp), INTENT(INOUT), DIMENSION(mesh%nedges,mesh%nedges) :: D
+    COMPLEX(KIND=dp)  :: c1, k
+    INTEGER           :: nweights, n, m, p, q, r, index1, index2
+    COMPLEX(KIND=dp)  :: int1
+    REAL(KIND=dp)     :: Am
+    REAL(KIND=dp), DIMENSION(3,qd%num_nodes)    :: qpm
+    COMPLEX(KIND=dp), DIMENSION(3,3,qd%num_nodes,mesh%nfaces) :: intaux
+    REAL(KIND=dp), DIMENSION(3,qd%num_nodes,3)  :: fmv
+    LOGICAL :: near
+
+    WRITE(*,*) '  Building a D-matrix'
+
+    nweights = qd%num_nodes
+
+    D(:,:) = 0.0_dp
+
+    k = ri*omega/c0
+
+    ! Coefficients of partial integrals.
+    c1 = -(0,1)*omega*mu0
+
+    DO m=1,mesh%nfaces
+
+      qpm = quad_tri_points(qd, m, mesh)
+      Am = mesh%faces(m)%area
+
+      DO p=1,3
+        CALL vrwg(qpm,m,p,mesh,fmv(:,:,p)) ! f_n(r), vector basis function
+      END DO
+
+      !$OMP PARALLEL DEFAULT(NONE)&
+      !$OMP SHARED(nweights,intaux,qpm,mesh,k,ga,prd,m,qd)&
+      !$OMP PRIVATE(n,near,r)
+      !$OMP DO SCHEDULE(STATIC)
+      DO n=1,mesh%nfaces
+        near = near_faces(mesh, prd, n, m, ga)
+
+        DO r=1,nweights
+           intaux(:,:,r,n) = intK2(qpm(:,r), n, mesh, k, ga, prd, near, qd)
+        END DO
+      END DO
+      !$OMP END DO
+      !$OMP END PARALLEL
+
+      DO n=1,mesh%nfaces
+
+        DO p=1,3
+           DO q=1,3
+
+              int1 = 0.0_dp
+              DO r=1,nweights
+                 int1 = int1 + qd%weights(r)*dotc(CMPLX(fmv(:,r,p),KIND=dp), intaux(:,q,r,n))
+              END DO
+              int1 = int1*Am
+
+              index1 = mesh%faces(m)%edge_indices(p)
+              index2 = mesh%faces(n)%edge_indices(q)
+
+              D(index1,index2) = D(index1,index2) + c1*int1
+           END DO
+        END DO
+      END DO
+
+    END DO
+
+  END SUBROUTINE computeD
+  
+  ! Computes the H-matrix elements
+  ! H_mng = -1/(i*omega*epsilon)*int_Sm dS div_S(fm(r)) int_Sn' dS' div'_S(fn(r'))*O'_gG(r,r').
+  ! IN:
+  ! omega: The angular frequency.
+  ! ri: Refractive index of the domain.
+  ! mesh: Surface mesh of the scatterer.
+  ! ga: Group action identifiers.
+  ! prd: The periodic Green's function.
+  ! OUT:
+  ! H: The H-matrix.
+  SUBROUTINE computeH(omega, ri, mesh, ga, prd, qd, H)
+    ! Input variables
+    TYPE(mesh_container), INTENT(IN)  :: mesh
+    COMPLEX(KIND=dp), INTENT(IN)      :: ri
+    COMPLEX(KIND=dp), INTENT(IN)      :: omega
+    TYPE(group_action), INTENT(IN)    :: ga
+    TYPE(prdnfo), POINTER, INTENT(IN) :: prd
+    TYPE(quad_data), INTENT(IN)       :: qd
+
+    ! Internal variables
+    COMPLEX(KIND=dp), INTENT(INOUT), DIMENSION(mesh%nedges,mesh%nedges) :: H
+    COMPLEX(KIND=dp)  :: c2, k
+    INTEGER           :: nweights, n, m, p, q, r, index1, index2
+    REAL(KIND=dp)     :: Am
+    REAL(KIND=dp), DIMENSION(3,qd%num_nodes) :: qpm
+    COMPLEX(KIND=dp)  :: int1
+    REAL(KIND=dp), DIMENSION(3) :: fmDiv
+    COMPLEX(KIND=dp), DIMENSION(3,qd%num_nodes,mesh%nfaces) :: intaux
+    LOGICAL           :: near
+
+    WRITE(*,*) '  Building an H-matrix'
+
+    nweights = qd%num_nodes
+
+    H(:,:) = 0.0_dp
+
+    k = ri*omega/c0
+
+    ! Coefficients of partial integrals.
+    c2 = -1.0_dp/((0,1)*omega*eps0*(ri**2))
+
+    DO m=1,mesh%nfaces
+
+       qpm = quad_tri_points(qd, m, mesh)
+       Am = mesh%faces(m)%area
+
+       DO p=1,3
+          fmDiv(p) = rwgDiv(m, p, mesh)
+       END DO
+
+       !$OMP PARALLEL DEFAULT(NONE)&
+       !$OMP SHARED(nweights,intaux,qpm,mesh,k,ga,prd,m,qd)&
+       !$OMP PRIVATE(r,n,near)
+       !$OMP DO SCHEDULE(STATIC)
+       DO n=1,mesh%nfaces
+          near = near_faces(mesh, prd, n, m, ga)
+
+          DO r=1,nweights
+             intaux(:,r,n) = intK1(qpm(:,r), n, mesh, k, ga, prd, near, qd)
+          END DO
+       END DO
+       !$OMP END DO
+       !$OMP END PARALLEL
+
+       DO n=1,mesh%nfaces
+
+          DO p=1,3
+             DO q=1,3
+
+                int1 = 0.0_dp
+                DO r=1,nweights
+                   int1 = int1 + qd%weights(r)*intaux(q,r,n)
+                END DO
+                int1 = int1*Am*fmDiv(p)
+
+                index1 = mesh%faces(m)%edge_indices(p)
+                index2 = mesh%faces(n)%edge_indices(q)
+
+                H(index1,index2) = H(index1,index2) + c2*int1
+             END DO
+          END DO
+       END DO
+
+    END DO
+
+  END SUBROUTINE computeH
+
+  ! Computes the K-matrix elements
+  ! K_mng = int_Sm dS fm(r). int_Sn' dS' [O'_g grad'G(r,r')]x(J_g*fn(r')).
+  ! IN:
+  ! omega: The angular frequency.
+  ! ri: Refractive index of the domain.
+  ! mesh: Surface mesh of the scatterer.
+  ! ga: Group action identifiers.
+  ! prd: The periodic Green's function.
+  ! OUT:
+  ! A: The K-matrix.
+  SUBROUTINE computeK(omega, ri, mesh, ga, prd, qd, A)
+    ! Input variables
+    TYPE(mesh_container), INTENT(IN)  :: mesh
+    COMPLEX(KIND=dp), INTENT(IN)      :: ri
+    COMPLEX(KIND=dp), INTENT(IN)      :: omega
+    TYPE(group_action), INTENT(IN)    :: ga
+    TYPE(prdnfo), POINTER, INTENT(IN) :: prd
+    TYPE(quad_data), INTENT(IN)       :: qd
+
+    ! Internal variables
+    COMPLEX(KIND=dp), INTENT(INOUT), DIMENSION(mesh%nedges,mesh%nedges) :: A
+    COMPLEX(KIND=dp)  :: k, int1
+    INTEGER           :: nweights, n, m, p, q, r, index1, index2
+    REAL(KIND=dp)     :: Am
+    REAL(KIND=dp), DIMENSION(3,qd%num_nodes)    :: qpm
+    COMPLEX(KIND=dp), DIMENSION(3,3,qd%num_nodes,mesh%nfaces) :: intaux
+    REAL(KIND=dp), DIMENSION(3,qd%num_nodes,3)  :: fmv
+    LOGICAL           :: near
+
+    WRITE(*,*) '  Building a K-matrix'
+
+    nweights = qd%num_nodes
+
+    A(:,:) = 0.0_dp
+
+    k = ri*omega/c0
+
+    DO m=1,mesh%nfaces
+
+       qpm = quad_tri_points(qd, m, mesh)
+       Am = mesh%faces(m)%area
+
+       DO p=1,3
+          CALL vrwg(qpm,m,p,mesh,fmv(:,:,p))
+       END DO
+
+       !$OMP PARALLEL DEFAULT(NONE)&
+       !$OMP SHARED(nweights,intaux,qpm,mesh,k,ga,m,prd,qd)&
+       !$OMP PRIVATE(r,n,near)
+       !$OMP DO SCHEDULE(STATIC)
+       DO n=1,mesh%nfaces
+          near = near_faces(mesh, prd, n, m, ga)
+
+          DO r=1,nweights
+             intaux(:,:,r,n) = intK4(qpm(:,r), n, mesh, k, ga, m, prd, near, qd)
+          END DO
+       END DO
+       !$OMP END DO
+       !$OMP END PARALLEL
+
+       DO n=1,mesh%nfaces
+
+          DO q=1,3
+             DO p=1,3
+
+                int1 = 0.0_dp
+                DO r=1,nweights
+                   int1 = int1 + qd%weights(r)*dotc(CMPLX(fmv(:,r,p),KIND=dp), intaux(:,q,r,n))
+                END DO
+                int1 = int1*Am
+
+                index1 = mesh%faces(m)%edge_indices(p)
+                index2 = mesh%faces(n)%edge_indices(q)
+
+                A(index1,index2) = A(index1,index2) + int1
+
+             END DO
+          END DO
+       END DO
+
+    END DO
+
+  END SUBROUTINE computeK
+
+  ! Computes the D-matrix elements
+  ! D_mng = -i*omega_mu*int_Sm dS fm(r). int_Sn' dS' J_g*fn(r')*O'_gG(r,r').
+  ! IN:
+  ! omega: The angular frequency.
+  ! ri: Refractive index of the domain.
+  ! mesh: Surface mesh of the scatterer.
+  ! ga: Group action identifiers.
+  ! prd: The periodic Green's function.
+  ! OUT:
+  ! D: The D-matrix.
+  SUBROUTINE computeD_b(omega, ri, mesh, ga, prd, qd, D)
     ! Input variables
     TYPE(mesh_container), INTENT(IN) :: mesh
     COMPLEX (KIND=dp), INTENT(IN) :: ri
@@ -475,7 +861,7 @@ CONTAINS
 
     END DO
 
-  END SUBROUTINE computeD
+  END SUBROUTINE computeD_b
 
   ! Computes the H-matrix elements
   ! H_mng = -1/(i*omega*epsilon)*int_Sm dS div_S(fm(r)) int_Sn' dS' div'_S(fn(r'))*O'_gG(r,r').
@@ -487,7 +873,7 @@ CONTAINS
   ! prd: The periodic Green's function.
   ! OUT:
   ! H: The H-matrix.
-  SUBROUTINE computeH(omega, ri, mesh, ga, prd, qd, H)
+  SUBROUTINE computeH_b(omega, ri, mesh, ga, prd, qd, H)
     ! Input variables
     TYPE(mesh_container), INTENT(IN) :: mesh
     COMPLEX (KIND=dp), INTENT(IN) :: ri
@@ -562,7 +948,7 @@ CONTAINS
 
     END DO
 
-  END SUBROUTINE computeH
+  END SUBROUTINE computeH_b
 
   ! Computes the K-matrix elements
   ! K_mng = int_Sm dS fm(r). int_Sn' dS' [O'_g grad'G(r,r')]x(J_g*fn(r')).
@@ -574,7 +960,7 @@ CONTAINS
   ! prd: The periodic Green's function.
   ! OUT:
   ! A: The K-matrix.
-  SUBROUTINE computeK(omega, ri, mesh, ga, prd, qd, A)
+  SUBROUTINE computeK_b(omega, ri, mesh, ga, prd, qd, A)
     ! Input variables
     TYPE(mesh_container), INTENT(IN) :: mesh
     COMPLEX (KIND=dp), INTENT(IN) :: ri
@@ -646,7 +1032,7 @@ CONTAINS
 
     END DO
 
-  END SUBROUTINE computeK
+  END SUBROUTINE computeK_b
 
   ! Compute the nxD-matrix elements,
   ! D_mng = int_Sm dS fm(r).n(r) x int_Sn' dS' J_g*fn(r')*O'_gG(r,r'),

@@ -78,7 +78,7 @@ CONTAINS
              END DO
 
              ! Compute the incident fields.
-             CALL src_fields(src, omega, ri, MATMUL(ga(ns)%j,qpn(:,t)), einc, hinc)
+             CALL src_fields_b(src, omega, ri, MATMUL(ga(ns)%j,qpn(:,t)), einc, hinc)
 
              ! Compute the scattered fields.
              Hti = crossc(crossc(CMPLX(nor,KIND=dp), hinc), CMPLX(nor,KIND=dp))
