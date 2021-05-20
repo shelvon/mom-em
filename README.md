@@ -1,6 +1,6 @@
 [GNU GENERAL PUBLIC LICENSE Version 2, June 1991](./LICENSE.md)
 
-#USER'S GUIDE
+# USER'S GUIDE
 
 The project name is changed to **[mom-em](https://github.com/shelvon/mom-em)** (which stands for **the Method of Moments for Electromagnetics**)
 
@@ -56,7 +56,7 @@ The program is made for solving linear and weakly nonlinear scattering problems,
 - Eigenmodes of flat PEC scatterers/antennas.
 - Volume integral formulation of scattering from inhomogeneous objects. Uses SWG basis and Duffy transform.
 
-##Building
+## Building
 
 *Fortran compilers* (the following two compilers under Linux/macOS environment are tested):  
 - `ifort`  
@@ -69,7 +69,7 @@ If the end-user runs into errors, he/she is welcomed to contact us.
 *Libraries* that should be installed separately:  
 - `HDF5`, the fortran support must be enabled. One also needs to set `HDF5_ROOT` environment variable to the `HDF5` installation folder.  
 - `LAPACK`, during the development, *Intel's Math Kernel Library (MKL)* packaging of `LAPACK` was used. One needs to set `MKLROOT` environment variable to the `MKL` installation folder.  
-- `OPENMP`, support for parallel computation. This library is genenally included in compilers.  
+- `OPENMP`, support for parallel computation. This library is generally  included in compilers.  
 
 *Libraries* that have been included in this project:  
 - `fson`, the *Fortran 95 JSON Parser* is placed under `src/fson` forked from [https://github.com/josephalevin/fson](https://github.com/josephalevin/fson).  
@@ -88,14 +88,14 @@ Alternatively, set `FC=gfortran` to use gfortran compiler, and use `make -j -k` 
 
 The executeable named `mom` will be placed in `bin/` directory.
 
-##Basics usage
+## Basics usage
 
-###Parallel computation
+### Parallel computation
 
 The program supports symmetric multiprocessing via OpenMP (when installed). To get n threads, set the environment variable as follows.
 
 	"OMP_NUM_THREADS=n"
-###Read parameters
+### Read parameters
 
 There are two ways to use this program.
 1. Read parameters from a json file.  
@@ -110,7 +110,7 @@ There are two ways to use this program.
 			`./mom < input`  
 		In Unix-like operating systems you can pass the commands via a text file with stdin redirection.
 
-####1. Read parameters from JSON file (Recommended)
+#### 1. Read parameters from JSON file (Recommended)
 
 There are several advantages of using this new method for reading parameters.  
 - The order of nodes in a json file doesn't matter.  
@@ -276,7 +276,7 @@ A typical json root object looks like as follow.
 }
 ```
 
-####2. Read parameters from commands
+#### 2. Read parameters from commands
 
 This section explains the commands implemented in the main interface of the program. Note that the usage of the program should not be limited to the use of this interface. The interface only provides actions for the most common use of the program as was required during the development phase. The user may add new functionality to the source code and if necessary, add a new interface command for this.
 
@@ -285,6 +285,11 @@ Wavelengths are used to fix the frequency of the time-harmonic problem. This is 
 In the following, brackets/braces are used to denote formal arguments of commands. Do not include the brackets in the actual arguments. A bracketed argument is to be replaced by only single actual argument and a braced argument can be replaced by multiple actual arguments.
 
 The implementation uses SI units, so all parameters should represent values in this unit system.
+
+To write a comment, simply put the hash mark # before your desired comment
+```
+Example: # This is a comment
+```
 
 COMMAND: `name [str]`  
 DESCRIPTION:  
@@ -493,7 +498,7 @@ Computes the diffracted power in the given order in a periodic problem. Integer 
 
 It is assumed that the incident plane-wave propagates from half-space z>0 to half-space z<0.
 
-#####Example input file
+##### Example input file
 
 Say you want to compute the cross-sections of a sphere. Then pass in this input file:
 
@@ -547,7 +552,7 @@ exit
 
 The glass substrate occupies the negative z half-space and the plane-wave is incident in the negative z direction.
 
-#####File format specifications
+##### File format specifications
 
 Here brackets denote a row or a matrix of data and braces denote an arbitrary sequence of data.
 
