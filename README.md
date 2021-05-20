@@ -286,6 +286,11 @@ In the following, brackets/braces are used to denote formal arguments of command
 
 The implementation uses SI units, so all parameters should represent values in this unit system.
 
+To write a comment, simply put the hash mark # before your desired comment
+```
+Example: # This is a comment
+```
+
 COMMAND: `name [str]`  
 DESCRIPTION:  
 Sets the name of the computation. The name is used mainly to create output filenames. Avoid spaces and special characters in the name as this might cause trouble depending on the filesystem in use.
