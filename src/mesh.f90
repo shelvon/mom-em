@@ -573,6 +573,7 @@ CONTAINS
     INTEGER, DIMENSION(:,:), POINTER :: lines
     INTEGER :: nelements, element_number, iovar, fid = 10, n
     CHARACTER (LEN=256) :: lineid
+    CHARACTER (LEN=3) :: mshver
 
     OPEN(fid, FILE=TRIM(filename), ACTION='READ', IOSTAT=iovar)
     IF(iovar>0) THEN
@@ -583,6 +584,15 @@ CONTAINS
     iovar = 0
     DO WHILE(iovar==0)
        READ(fid, *, IOSTAT=iovar) lineid
+       if(lineid == '$MeshFormat') THEN
+          READ(fid, '(A3)', IOSTAT=iovar) mshver
+          IF(mshver/='2.1' .AND. mshver/='2.2') THEN
+             WRITE(*,*) 'Mesh version is unsupported!'
+             CLOSE(fid)
+             STOP
+          END IF
+
+          END IF
        IF(lineid=='$Elements') THEN
           READ(fid, *, IOSTAT=iovar) nelements
           ALLOCATE(lines(nelements,1:2))
